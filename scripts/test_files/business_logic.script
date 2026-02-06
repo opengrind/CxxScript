@@ -1,0 +1,59 @@
+// Business logic for user registration and discount calculation
+
+int32 calculateUserLevel(int32 age, int32 yearsActive) {
+  if (age >= 60 || yearsActive >= 10) {
+    return 3;  // Premium
+  }
+  if (age >= 30 || yearsActive >= 5) {
+    return 2;  // Standard
+  }
+  return 1;  // Basic
+}
+
+int32 calculateDiscount(int32 userLevel, int32 purchaseAmount) {
+  int32 baseDiscount = 0;
+  
+  if (userLevel == 3) {
+    baseDiscount = 20;
+  } else {
+    if (userLevel == 2) {
+      baseDiscount = 10;
+    } else {
+      baseDiscount = 5;
+    }
+  }
+  
+  // Bonus discount for large purchases
+  if (purchaseAmount >= 1000) {
+    baseDiscount = baseDiscount + 5;
+  }
+  
+  return baseDiscount;
+}
+
+int32 calculateFinalPrice(int32 originalPrice, int32 discountPercent) {
+  int32 discount = originalPrice * discountPercent;
+  int32 discountAmount = discount / 100;
+  return originalPrice - discountAmount;
+}
+
+bool canPurchaseAlcohol(int32 age, string country) {
+  if (country == "USA") {
+    return age >= 21;
+  }
+  if (country == "Japan") {
+    return age >= 20;
+  }
+  // Default (most countries)
+  return age >= 18;
+}
+
+string getUserLevelName(int32 level) {
+  if (level == 3) {
+    return "Premium";
+  }
+  if (level == 2) {
+    return "Standard";
+  }
+  return "Basic";
+}

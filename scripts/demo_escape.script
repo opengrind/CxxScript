@@ -1,0 +1,31 @@
+// Demo: String escape sequences
+
+string formatMessage() {
+  string quote = "She said \"Hello!\"";
+  return quote;
+}
+
+string formatPath() {
+  string windowsPath = "C:\\Program Files\\MyApp\\bin";
+  string unixPath = "/usr/local/bin";
+  return "Windows: " + windowsPath + "\nUnix: " + unixPath;
+}
+
+string formatTable() {
+  string header = "Name\tAge\tCity";
+  string row1 = "Alice\t25\tNew York";
+  string row2 = "Bob\t30\tLondon";
+  return header + "\n" + row1 + "\n" + row2;
+}
+
+string formatMultiline() {
+  string message = "Line 1\nLine 2\nLine 3";
+  return message;
+}
+
+string formatLog() {
+  string timestamp = "2025-11-26";
+  string level = "INFO";
+  string msg = "User \"admin\" logged in successfully";
+  return "[" + timestamp + "] " + level + ": " + msg;
+}

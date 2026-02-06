@@ -1,0 +1,150 @@
+// Example .script file demonstrating the scripting language
+
+// Calculate factorial using a for loop
+int32 factorial(int32 n) {
+    int32 result = 1;
+    for (int32 i = 1; i <= n; i += 1) {
+        result *= i;
+    }
+    return result;
+}
+
+// Check if a number is prime
+bool isPrime(int32 n) {
+    if (n <= 1) {
+        return false;
+    }
+    
+    for (int32 i = 2; i < n; i += 1) {
+        if (n % i == 0) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// Calculate sum of integers from 1 to n
+int32 sumRange(int32 n) {
+    int32 sum = 0;
+    int32 i = 1;
+    
+    while (i <= n) {
+        sum += i;
+        i += 1;
+    }
+    
+    return sum;
+}
+
+// Example from the requirements
+bool calculate(int32 arg1, int32 arg2) {
+    int32 var1 = arg1 + 56;
+    int32 var2 = arg2 / 34;
+    int32 total = var1 + var2;
+    
+    if (total > 43) {
+        return true;
+    }
+    
+    return false;
+}
+
+// Demonstrate string operations
+string greet(string name) {
+    string greeting = "Hello, ";
+    greeting += name;
+    greeting += "!";
+    return greeting;
+}
+
+// Fibonacci sequence
+int32 fibonacci(int32 n) {
+    if (n <= 1) {
+        return n;
+    }
+    
+    int32 a = 0;
+    int32 b = 1;
+    
+    for (int32 i = 2; i <= n; i += 1) {
+        int32 temp = a + b;
+        a = b;
+        b = temp;
+    }
+    
+    return b;
+}
+
+// Find maximum of two numbers
+int32 max(int32 a, int32 b) {
+    if (a > b) {
+        return a;
+    } else {
+        return b;
+    }
+}
+
+// Find minimum of three numbers using nested calls
+int32 min3(int32 a, int32 b, int32 c) {
+    int32 minAB = a;
+    if (b < minAB) {
+        minAB = b;
+    }
+    
+    if (c < minAB) {
+        return c;
+    }
+    
+    return minAB;
+}
+
+// Demonstrate all arithmetic operators
+int32 arithmeticDemo(int32 x, int32 y) {
+    int32 sum = x + y;
+    int32 diff = x - y;
+    int32 prod = x * y;
+    int32 quot = x / y;
+    int32 rem = x % y;
+    
+    int32 result = sum + diff * prod - quot / rem;
+    return result;
+}
+
+// Demonstrate compound assignments
+int32 compoundAssignments(int32 value) {
+    int32 x = value;
+    
+    x += 10;  // x = x + 10
+    x -= 5;   // x = x - 5
+    x *= 2;   // x = x * 2
+    x /= 3;   // x = x / 3
+    
+    return x;
+}
+
+// Demonstrate logical operators
+bool logicalDemo(bool a, bool b) {
+    bool andResult = a && b;
+    bool orResult = a || b;
+    bool notA = !a;
+    
+    if (andResult || notA) {
+        return true;
+    }
+    
+    return orResult;
+}
+
+// Count even numbers in a range
+int32 countEven(int32 start, int32 end) {
+    int32 count = 0;
+    
+    for (int32 i = start; i <= end; i += 1) {
+        if (i % 2 == 0) {
+            count += 1;
+        }
+    }
+    
+    return count;
+}

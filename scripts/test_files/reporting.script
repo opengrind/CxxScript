@@ -1,0 +1,36 @@
+// Reporting and formatting functions
+
+string formatUserProfile(string username, int32 age, int32 level) {
+  string levelName = getUserLevelName(level);
+  return "User: " + username + " (Age: " + age + ", Level: " + levelName + ")";
+}
+
+string formatPurchase(int32 originalPrice, int32 discount, int32 finalPrice) {
+  return "Original: $" + originalPrice + ", Discount: " + discount + "%, Final: $" + finalPrice;
+}
+
+string generateWelcomeMessage(string username, bool isValid) {
+  if (isValid) {
+    return "Welcome, " + username + "! Your registration was successful.";
+  }
+  return "Registration failed for " + username + ". Please check your information.";
+}
+
+string generatePurchaseConfirmation(string username, int32 finalPrice, bool approved) {
+  if (approved) {
+    return "Purchase confirmed for " + username + ". Total: $" + finalPrice;
+  }
+  return "Purchase denied for " + username + ". Age verification required.";
+}
+
+int32 calculateTotalRevenue(int32 sales, int32 count) {
+  int32 total = sales * count;
+  return total;
+}
+
+string formatRevenueReport(int32 totalSales, int32 itemCount, int32 revenue) {
+  string report = "Sales Report: ";
+  report = report + itemCount + " items sold, ";
+  report = report + "Total Revenue: $" + revenue;
+  return report;
+}

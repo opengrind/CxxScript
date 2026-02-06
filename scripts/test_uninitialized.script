@@ -1,0 +1,46 @@
+// Test uninitialized variables
+
+// Test 1: Uninitialized integer (defaults to 0)
+int32 testUninitInt() {
+    int32 x;
+    return x;
+}
+
+// Test 2: Uninitialized bool (defaults to false)
+bool testUninitBool() {
+    bool flag;
+    return flag;
+}
+
+// Test 3: Uninitialized string (defaults to empty)
+string testUninitString() {
+    string s;
+    return s;
+}
+
+// Test 4: Declare then assign
+int32 testDeclareAssign() {
+    int32 x;
+    x = 42;
+    return x;
+}
+
+// Test 5: Mixed initialized and uninitialized
+int32 testMixed() {
+    int32 a;           // uninitialized (0)
+    int32 b = 10;      // initialized
+    int32 c;           // uninitialized (0)
+    c = a + b + 5;
+    return c;
+}
+
+// Test 6: Multiple declarations
+int32 testMultiple() {
+    int32 x;
+    int32 y;
+    int32 z;
+    x = 1;
+    y = 2;
+    z = 3;
+    return x + y + z;
+}

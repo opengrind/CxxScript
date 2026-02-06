@@ -1,0 +1,55 @@
+# Build outputs
+/build/
+/bin/
+/lib/
+/CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+Makefile
+cmake-build-
+*.ninja
+*.ninja_log
+*.ninja_deps
+
+# CMake generated targets/config
+**/*.dir/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/CTestTestfile.cmake
+**/Makefile
+**/compile_commands.json
+
+# Dependencies
+/_deps/
+
+# IDE/editor state
+.vscode/
+.cache/
+
+# Object and archive files
+*.o
+*.obj
+*.a
+*.lib
+*.pch
+*.pdb
+*.dll
+*.exe
+*.so
+*.dylib
+*.exp
+*.ilk
+*.out
+*.log
+
+# Python cache (if scripts/tests use it)
+__pycache__/
+*.pyc
+
+# Generated test includes from CTest
+/test_*[[]1[]]_include.cmake
+/test_*[[]1[]]_tests.cmake
+

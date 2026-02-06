@@ -1,0 +1,12 @@
+// Math utilities
+int32 add(int32 a, int32 b) {
+    return a + b;
+}
+
+int32 multiply(int32 a, int32 b) {
+    return a * b;
+}
+
+int32 square(int32 x) {
+    return multiply(x, x);
+}

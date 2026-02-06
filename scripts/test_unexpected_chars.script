@@ -1,0 +1,19 @@
+// This file demonstrates various unexpected characters
+
+int32 test1(int32 x): {  // Colon after parameter list
+    return x + 1;
+}
+
+int32 test2(int32 x) {
+    int32 result = x @ 5;  // @ is not a valid operator
+    return result;
+}
+
+int32 test3(int32 x) {
+    int32 y = x # 10;  // # is not a valid operator
+    return y;
+}
+
+string test4(string s) {
+    return s $ "suffix";  // $ is not a valid operator
+}

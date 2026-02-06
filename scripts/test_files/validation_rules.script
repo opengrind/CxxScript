@@ -1,0 +1,32 @@
+// Validation rules for user registration system
+
+bool isValidAge(int32 age) {
+  return age >= 18 && age <= 120;
+}
+
+bool isValidUsername(string username) {
+  int32 len = strlen(username);
+  return len >= 3 && len <= 20;
+}
+
+bool isValidEmail(string email) {
+  int32 len = strlen(email);
+  bool hasAt = contains(email, "@");
+  bool hasDot = contains(email, ".");
+  return len >= 5 && hasAt && hasDot;
+}
+
+bool isValidPassword(string password) {
+  int32 len = strlen(password);
+  return len >= 8 && len <= 50;
+}
+
+string getAgeValidationMessage(int32 age) {
+  if (age < 18) {
+    return "User must be at least 18 years old";
+  }
+  if (age > 120) {
+    return "Invalid age: too old";
+  }
+  return "Age is valid";
+}

@@ -1,0 +1,60 @@
+// High-level workflows that orchestrate multiple procedures
+
+string processUserRegistration(string username, string email, string password, int32 age) {
+  // Validate all fields
+  bool validUsername = isValidUsername(username);
+  bool validEmail = isValidEmail(email);
+  bool validPassword = isValidPassword(password);
+  bool validAge = isValidAge(age);
+  
+  bool allValid = validUsername && validEmail && validPassword && validAge;
+  
+  if (allValid) {
+    return generateWelcomeMessage(username, true);
+  }
+  
+  // Return specific error
+  if (!validAge) {
+    return getAgeValidationMessage(age);
+  }
+  if (!validUsername) {
+    return "Invalid username. Must be 3-20 characters.";
+  }
+  if (!validEmail) {
+    return "Invalid email format.";
+  }
+  return "Invalid password. Must be 8-50 characters.";
+}
+
+string processPurchase(string username, int32 age, int32 yearsActive, int32 itemPrice, string itemType) {
+  // Check age restriction for alcohol
+  bool needsAgeCheck = itemType == "alcohol";
+  
+  if (needsAgeCheck) {
+    bool canBuy = canPurchaseAlcohol(age, "USA");
+    if (!canBuy) {
+      return generatePurchaseConfirmation(username, 0, false);
+    }
+  }
+  
+  // Calculate user level and discount
+  int32 level = calculateUserLevel(age, yearsActive);
+  int32 discount = calculateDiscount(level, itemPrice);
+  int32 finalPrice = calculateFinalPrice(itemPrice, discount);
+  
+  // Generate confirmation
+  string priceDetails = formatPurchase(itemPrice, discount, finalPrice);
+  string confirmation = generatePurchaseConfirmation(username, finalPrice, true);
+  
+  return confirmation + " | " + priceDetails;
+}
+
+string getUserSummary(string username, int32 age, int32 yearsActive, int32 totalSpent) {
+  int32 level = calculateUserLevel(age, yearsActive);
+  string profile = formatUserProfile(username, age, level);
+  
+  int32 avgDiscount = calculateDiscount(level, totalSpent);
+  string discountInfo = "Average Discount: " + avgDiscount + "%";
+  
+  return profile + " | " + discountInfo + " | Total Spent: $" + totalSpent;
+}

@@ -1,0 +1,23 @@
+// Main logic that uses functions from other files
+int32 computeSum(int32 x, int32 y) {
+    // Calls function from math_utils.script
+    return add(x, y);
+}
+
+int32 computeSquareSum(int32 a, int32 b) {
+    // Calls functions from math_utils.script
+    int32 sq1 = square(a);
+    int32 sq2 = square(b);
+    return add(sq1, sq2);
+}
+
+string makeGreeting(string firstName, string lastName) {
+    // Calls functions from string_utils.script
+    string fullName = concat(firstName, concat(" ", lastName));
+    return greet(fullName);
+}
+
+string formatResult(int32 value) {
+    // Calls external C++ function via string_utils.script
+    return formatNumber(value);
+}

@@ -1,0 +1,51 @@
+// This is a single-line comment
+// Comments are ignored by the parser
+
+/* This is a block comment
+   that can span multiple lines
+   and is also ignored */
+
+// Function with inline comments
+int32 testComments() {
+    int32 x = 10;  // Initialize x to 10
+    int32 y = 20;  // Initialize y to 20
+    
+    /* Calculate the sum
+       of x and y */
+    int32 sum = x + y;
+    
+    // Return the result
+    return sum;  // Should be 30
+}
+
+/* 
+ * Block comment with
+ * asterisk style formatting
+ */
+int32 testNestedLogic() {
+    int32 a = 5;   // First value
+    int32 b = 3;   // Second value
+    
+    /* 
+     * Multiply then add
+     */
+    int32 result = a * b + 10;  // 5 * 3 + 10 = 25
+    
+    return result;
+}
+
+// Multiple consecutive line comments
+// can be used for documentation
+// just like this
+int32 documentedFunction() {
+    // Step 1: Initialize
+    int32 value = 100;
+    
+    // Step 2: Divide by 2
+    value = value / 2;
+    
+    // Step 3: Return
+    return value;  // Returns 50
+}
+
+/* Block comment at end of code */

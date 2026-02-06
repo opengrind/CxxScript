@@ -1,0 +1,42 @@
+// Test 1: No indentation
+int32 noIndent() {
+return 42;
+}
+
+// Test 2: With indentation (2 spaces)
+int32 withIndent() {
+  return 42;
+}
+
+// Test 3: With tabs
+int32 withTabs() {
+	return 42;
+}
+
+// Test 4: Mixed indentation
+int32 mixedIndent() {
+    int32 x = 10;
+	int32 y = 20;
+  int32 z = x + y;
+      return z;
+}
+
+// Test 5: Multiline with varying indentation
+int32 multiline() {
+int32 a=1;
+        int32 b        =        2;
+int32 c         =a+b;
+                return c;
+}
+
+// Test 6: Lots of spaces between tokens
+int32 lotsOfSpaces() {
+    int32    x    =    5    +    3    ;
+    return    x    *    2    ;
+}
+
+// Test 7: Single line procedure
+int32 oneLine() { return 99; }
+
+// Test 8: Single line with logic
+int32 oneLineWithLogic() { int32 x = 10; int32 y = 20; return x + y; }
