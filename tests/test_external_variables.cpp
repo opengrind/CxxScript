@@ -32,7 +32,7 @@ TEST(ExternalVariablesTest, ReadOnlyVariableRejectsWrite) {
   int32_t constantVal = 7;
 
   ScriptManager manager;
-  manager.registerExternalVariable(
+  manager.registerExternalVariableReadOnly(
       "constVal", [&]() -> Value { return static_cast<int32_t>(constantVal); });
 
   std::string source = "int32 test() { constVal = 2; return constVal; }";

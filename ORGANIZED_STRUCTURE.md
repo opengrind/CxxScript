@@ -29,13 +29,20 @@
 │   ├── test_error_handling.cpp     # Error handling tests
 │   ├── test_comprehensive.cpp      # Comprehensive integration tests
 │   ├── test_external_functions.cpp # External function binding tests
+│   ├── test_external_variables.cpp # External variable binding tests
 │   ├── test_multi_file.cpp         # Multi-file script tests
 │   ├── test_string_concat.cpp      # String concatenation tests
-│   └── test_real_world_app.cpp     # Real-world e-commerce example
+│   ├── test_escape_sequences.cpp   # String escape handling tests
+│   ├── test_control_flow.cpp       # Control flow edge cases
+│   ├── test_bitwise.cpp            # Bitwise operator tests
+│   └── test_arrays.cpp             # Array behavior and safety
 │
 ├── examples/            # Example applications
 │   ├── example_usage.cpp         # Basic usage example
-│   └── demo_error_detection.cpp  # Error detection demo
+│   ├── demo_error_detection.cpp  # Error detection demo
+│   ├── demo_uninitialized.cpp    # Uninitialized variable demo
+│   ├── demo_whitespace.cpp       # Whitespace/formatting demo
+│   └── test_debug.cpp            # Debug helper example
 │
 ├── scripts/             # Script files
 │   ├── example.script            # Basic example script
@@ -55,7 +62,9 @@
 │   │   └── libCxxScript.a
 │   ├── bin/            # Example executables
 │   │   ├── example_usage
-│   │   └── demo_error_detection
+│   │   ├── demo_error_detection
+│   │   ├── demo_uninitialized
+│   │   └── demo_whitespace
 │   └── tests/          # Test executables
 │       ├── test_lexer
 │       ├── test_parser

@@ -3,6 +3,8 @@
 #include "AST.h"
 #include "DataTypes.h"
 #include <functional>
+#include <initializer_list>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -35,6 +37,11 @@ class ContinueException : public std::exception {};
 using ExternalFunctionCallback =
   std::function<Value(const std::vector<Value> &)>;
 
+struct ExternalBinding {
+  std::string name;
+  ExternalFunctionCallback callback;
+};
+
 // External variable callbacks
 using ExternalVariableGetter = std::function<Value()>;
 using ExternalVariableSetter = std::function<void(const Value &)>;
@@ -47,6 +54,13 @@ public:
   void registerExternalFunction(const std::string &name,
                                 ExternalFunctionCallback callback);
 
+  // Register multiple external functions at once
+  void registerExternalFunctions(const std::vector<ExternalBinding> &bindings);
+
+  // Register multiple external functions via initializer list
+  void registerExternalFunctions(
+      std::initializer_list<ExternalBinding> bindings);
+
   // Unregister an external function
   void unregisterExternalFunction(const std::string &name);
 
@@ -57,6 +71,10 @@ public:
   void registerExternalVariable(const std::string &name,
                                 ExternalVariableGetter getter,
                                 ExternalVariableSetter setter = nullptr);
+
+  // Convenience overload for read-only variables
+  void registerExternalVariableReadOnly(const std::string &name,
+                                        ExternalVariableGetter getter);
 
   // Unregister an external variable
   void unregisterExternalVariable(const std::string &name);
@@ -69,6 +87,10 @@ public:
 
   // Execute a procedure by name
   Value executeProcedure(const std::string &name,
+                         const std::vector<Value> &arguments);
+
+  // Internal fast path when procedure is already resolved
+  Value executeProcedure(ProcedureDeclPtr proc,
                          const std::vector<Value> &arguments);
 
   // Check if a procedure exists
@@ -95,6 +117,10 @@ private:
     Environment *_parent;
     std::vector<std::unordered_map<std::string, Value>> _scopes;
     std::unordered_map<std::string, Value> _globals;
+    mutable std::unordered_map<std::string, size_t> _lookupCache; // name -> scope index (GLOBAL = npos)
+    std::vector<std::vector<std::string>> _scopeNames;            // names defined per scope for cache invalidation
+
+    static constexpr size_t GLOBAL = std::numeric_limits<size_t>::max();
   };
 
   std::unordered_map<std::string, ProcedureDeclPtr> _procedures;
@@ -106,6 +132,7 @@ private:
   std::unordered_map<std::string, ExternalVariable> _externalVariables;
   Environment *_currentEnv;
   std::string _currentProcedure;
+  uint64_t _callCacheVersion = 1;
 
   // Evaluation methods
   Value evaluate(ExprPtr expr);

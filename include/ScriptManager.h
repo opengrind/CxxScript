@@ -3,8 +3,10 @@
 #include "Interpreter.h"
 #include "Lexer.h"
 #include "Parser.h"
+#include <initializer_list>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -69,6 +71,13 @@ public:
   void registerExternalFunction(const std::string &name,
                                 ExternalFunctionCallback callback);
 
+  // Register multiple external functions at once
+  void registerExternalFunctions(const std::vector<ExternalBinding> &bindings);
+
+  // Register multiple external functions via initializer list
+  void registerExternalFunctions(
+      std::initializer_list<ExternalBinding> bindings);
+
   // Unregister an external function
   void unregisterExternalFunction(const std::string &name);
 
@@ -79,6 +88,19 @@ public:
   void registerExternalVariable(const std::string &name,
                                 ExternalVariableGetter getter,
                                 ExternalVariableSetter setter = nullptr);
+
+  // Register a read-only external variable (setter omitted)
+  void registerExternalVariableReadOnly(const std::string &name,
+                                         ExternalVariableGetter getter);
+
+  // Typed helpers for common unary/binary external functions
+  template <typename Ret, typename Arg>
+  void registerExternalFunctionUnary(const std::string &name,
+                                     std::function<Ret(Arg)> fn);
+
+  template <typename Ret, typename Arg1, typename Arg2>
+  void registerExternalFunctionBinary(const std::string &name,
+                                      std::function<Ret(Arg1, Arg2)> fn);
 
   // Unregister an external variable
   void unregisterExternalVariable(const std::string &name);
@@ -97,5 +119,74 @@ private:
   bool compileScript(const std::string &source, const std::string &filename,
                      std::vector<CompilationError> &errors, bool load);
 };
+
+// --- Inline implementations for typed helpers ---
+
+namespace detail {
+inline Value toValue(const int32_t v) { return static_cast<int32_t>(v); }
+inline Value toValue(const double v) { return v; }
+inline Value toValue(const bool v) { return v; }
+inline Value toValue(const std::string &v) { return v; }
+
+template <typename T> inline T fromValue(const Value &v);
+
+template <> inline int32_t fromValue<int32_t>(const Value &v) {
+  return static_cast<int32_t>(ValueHelper::toInt64(v));
+}
+template <> inline double fromValue<double>(const Value &v) {
+  return ValueHelper::toDouble(v);
+}
+template <> inline bool fromValue<bool>(const Value &v) {
+  return ValueHelper::toBool(v);
+}
+template <> inline std::string fromValue<std::string>(const Value &v) {
+  return ValueHelper::toString(v);
+}
+
+template <typename T> struct IsSupportedType : std::false_type {};
+template <> struct IsSupportedType<int32_t> : std::true_type {};
+template <> struct IsSupportedType<double> : std::true_type {};
+template <> struct IsSupportedType<bool> : std::true_type {};
+template <> struct IsSupportedType<std::string> : std::true_type {};
+
+} // namespace detail
+
+template <typename Ret, typename Arg>
+void ScriptManager::registerExternalFunctionUnary(const std::string &name,
+                                                  std::function<Ret(Arg)> fn) {
+  static_assert(detail::IsSupportedType<Ret>::value, "Unsupported return type");
+  static_assert(detail::IsSupportedType<Arg>::value, "Unsupported argument type");
+
+  registerExternalFunction(
+      name, [fn](const std::vector<Value> &args) -> Value {
+        if (args.size() != 1) {
+          throw std::runtime_error("Expected 1 argument");
+        }
+        Arg a = detail::fromValue<Arg>(args[0]);
+        Ret r = fn(a);
+        return detail::toValue(r);
+      });
+}
+
+template <typename Ret, typename Arg1, typename Arg2>
+void ScriptManager::registerExternalFunctionBinary(
+    const std::string &name, std::function<Ret(Arg1, Arg2)> fn) {
+  static_assert(detail::IsSupportedType<Ret>::value, "Unsupported return type");
+  static_assert(detail::IsSupportedType<Arg1>::value,
+                "Unsupported first argument type");
+  static_assert(detail::IsSupportedType<Arg2>::value,
+                "Unsupported second argument type");
+
+  registerExternalFunction(
+      name, [fn](const std::vector<Value> &args) -> Value {
+        if (args.size() != 2) {
+          throw std::runtime_error("Expected 2 arguments");
+        }
+        Arg1 a1 = detail::fromValue<Arg1>(args[0]);
+        Arg2 a2 = detail::fromValue<Arg2>(args[1]);
+        Ret r = fn(a1, a2);
+        return detail::toValue(r);
+      });
+}
 
 } // namespace Script

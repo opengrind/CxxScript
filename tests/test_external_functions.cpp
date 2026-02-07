@@ -315,3 +315,74 @@ TEST(ExternalFunctionsTest, ClearResetsProceduresAndExternalFunctions) {
 
 }
 
+TEST(ExternalFunctionsTest, BatchRegistrationAndTypedHelpers) {
+  ScriptManager manager;
+
+  // Batch register two callbacks
+  manager.registerExternalFunctions({
+      {"triple", [](const std::vector<Value> &args) {
+         return static_cast<int32_t>(ValueHelper::toInt64(args[0]) * 3);
+       }},
+      {"concat", [](const std::vector<Value> &args) {
+         return std::get<std::string>(args[0]) + std::get<std::string>(args[1]);
+       }},
+  });
+
+  // Typed helper registrations
+  manager.registerExternalFunctionUnary<int32_t, int32_t>(
+      "add1", std::function<int32_t(int32_t)>([](int32_t x) { return x + 1; }));
+
+  manager.registerExternalFunctionBinary<int32_t, int32_t, int32_t>(
+      "add", std::function<int32_t(int32_t, int32_t)>(
+                  [](int32_t a, int32_t b) { return a + b; }));
+
+  std::string source =
+      "int32 run(int32 x) {"
+      "  int32 a = triple(x);"
+      "  int32 b = add1(x);"
+      "  int32 c = add(a, b);"
+      "  string s = concat(\"hi\", \" there\");"
+      "  return c + len([s]);"
+      "}";
+
+  std::vector<CompilationError> errors;
+  bool success = manager.loadScriptSource(source, "batch_typed.script", errors);
+  EXPECT_TRUE(success);
+
+  Value result;
+  std::string errorMsg;
+  success = manager.executeProcedure("run", {static_cast<int32_t>(2)}, result, errorMsg);
+  EXPECT_TRUE(success);
+  // triple(2)=6, add1(2)=3, add=9, len([s])=1 => 9+1=10
+  EXPECT_EQ(std::get<int32_t>(result), 10);
+}
+
+TEST(ExternalFunctionsTest, InitializerListRegistration) {
+  ScriptManager manager;
+
+  manager.registerExternalFunctions({
+      ExternalBinding{"alpha", [](const std::vector<Value> & /*args*/) {
+        return static_cast<int32_t>(3);
+      }},
+      ExternalBinding{"beta", [](const std::vector<Value> & /*args*/) {
+        return static_cast<int32_t>(4);
+      }},
+  });
+
+  const std::string source =
+      "int32 run() {";
+  const std::string body = "  return alpha() + beta();";
+  const std::string footer = "}";
+
+  std::vector<CompilationError> errors;
+  bool success = manager.loadScriptSource(source + body + footer,
+                                          "initlist.script", errors);
+  EXPECT_TRUE(success);
+
+  Value result;
+  std::string errorMsg;
+  success = manager.executeProcedure("run", {}, result, errorMsg);
+  EXPECT_TRUE(success);
+  EXPECT_EQ(std::get<int32_t>(result), 7);
+}
+

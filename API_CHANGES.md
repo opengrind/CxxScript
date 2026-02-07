@@ -1,7 +1,7 @@
 # External Function API Changes
 
 ## Summary
-Changed from a single callback function to a registry-based approach that supports multiple named external functions.
+Changed from a single callback function to a registry-based approach that supports multiple named external functions, bulk registration helpers, typed wrappers, and read-only external variables.
 
 ## API Changes
 
@@ -39,8 +39,20 @@ using ExternalFunctionCallback =
 // ScriptManager API
 void registerExternalFunction(const std::string &name,
                               ExternalFunctionCallback callback);
+// Bulk registration (vector or initializer_list)
+void registerExternalFunctions(const std::vector<ExternalBinding> &bindings);
+void registerExternalFunctions(std::initializer_list<ExternalBinding> bindings);
 void unregisterExternalFunction(const std::string &name);
 bool hasExternalFunction(const std::string &name) const;
+
+// Typed helpers (int32_t, double, bool, string)
+template <typename Ret, typename Arg>
+void registerExternalFunctionUnary(const std::string &name,
+                                   std::function<Ret(Arg)> fn);
+
+template <typename Ret, typename Arg1, typename Arg2>
+void registerExternalFunctionBinary(const std::string &name,
+                                    std::function<Ret(Arg1, Arg2)> fn);
 ```
 
 **Usage Example:**
@@ -63,6 +75,20 @@ if (manager.hasExternalFunction("add")) {
 
 // Unregister a function
 manager.unregisterExternalFunction("add");
+
+// Bulk register with initializer_list
+manager.registerExternalFunctions({
+    {"triple", [](const std::vector<Value> &args) {
+        return static_cast<int32_t>(ValueHelper::toInt64(args[0]) * 3);
+    }},
+    {"concat", [](const std::vector<Value> &args) {
+        return std::get<std::string>(args[0]) + std::get<std::string>(args[1]);
+    }},
+});
+
+// Typed helper (binary int32)
+manager.registerExternalFunctionBinary<int32_t, int32_t, int32_t>(
+    "add", [](int32_t a, int32_t b) { return a + b; });
 ```
 
 ## External Variables (New)
@@ -76,6 +102,9 @@ using ExternalVariableSetter = std::function<void(const Value&)>; // optional
 void registerExternalVariable(const std::string &name,
                               ExternalVariableGetter getter,
                               ExternalVariableSetter setter = nullptr);
+// Convenience for read-only variables
+void registerExternalVariableReadOnly(const std::string &name,
+                                       ExternalVariableGetter getter);
 void unregisterExternalVariable(const std::string &name);
 bool hasExternalVariable(const std::string &name) const;
 ```
@@ -100,6 +129,7 @@ manager.registerExternalVariable(
 4. **Type Safety**: Each function callback is independent
 5. **Easier Testing**: Can register different implementations for testing
 6. **Overwrite Support**: Re-registering a function replaces the previous implementation
+7. **Ergonomics**: Bulk/initializer_list registration and typed helpers reduce boilerplate
 
 ## Migration Guide
 
@@ -124,18 +154,18 @@ manager.registerExternalFunction("func2",
 
 ## Test Coverage
 
-New test file: `test_external_functions.cpp`
+`tests/test_external_functions.cpp`
 - ✅ Multiple external function registration
-- ✅ Function overwrite behavior
-- ✅ Unregister functionality
+- ✅ Bulk registration (vector and initializer_list)
+- ✅ Typed helpers (unary/binary, int32)
+- ✅ Function overwrite and unregister
 - ✅ Mixed internal and external calls
 - ✅ Different return types (int32, string, bool, double)
 - ✅ Array arguments/returns
 
-New test file: `test_external_variables.cpp`
-- ✅ Read/write external variable bridge
-- ✅ Read-only protection on setter-less variables
+`tests/test_external_variables.cpp`
+- ✅ Read/write and read-only external variables
 - ✅ Compound assignments on external values
 - ✅ Coverage for string, bool, double, array variables
 
-All existing tests updated and passing (6/6 test suites).
+Full suite passing (113 tests).

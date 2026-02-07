@@ -2,6 +2,7 @@
 
 #include "DataTypes.h"
 #include "Token.h"
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -16,6 +17,8 @@ class Statement;
 using ASTNodePtr = std::shared_ptr<ASTNode>;
 using ExprPtr = std::shared_ptr<Expression>;
 using StmtPtr = std::shared_ptr<Statement>;
+using ExternalFunctionCallback =
+  std::function<Value(const std::vector<Value> &)>;
 
 // Base AST Node
 class ASTNode {
@@ -97,6 +100,13 @@ class CallExpr : public Expression {
 public:
   std::string functionName;
   std::vector<ExprPtr> arguments;
+
+  // Inline cache for call dispatch
+  mutable uint64_t cacheVersion = 0;
+  mutable bool cachedIsProcedure = false;
+  mutable bool cachedIsExternal = false;
+  mutable std::weak_ptr<class ProcedureDecl> cachedProcedure;
+  mutable ExternalFunctionCallback cachedExternal;
 
   CallExpr(const std::string &name, const std::vector<ExprPtr> &args,
            int ln = 0, int col = 0)

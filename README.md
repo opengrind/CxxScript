@@ -26,8 +26,8 @@ cd build && ctest
 - **Control Flow**: if/else, while, for, do-while, switch/case/default, ternary `?:`, break/continue
 - **Compound Assignments**: +=, -=, *=, /=
 - **Procedure Calls**: Scripts can call other procedures defined in the same or different script files
-- **External Function Callbacks**: Call C++ functions from scripts with generic argument passing
-- **External Variables**: Expose host variables to scripts via getters/setters (read/write or read-only)
+- **External Function Callbacks**: Call C++ functions from scripts with generic argument passing, bulk registration, and typed helper wrappers
+- **External Variables**: Expose host variables to scripts via getters/setters (read/write or read-only helper)
 - **Comprehensive Error Reporting**: Compilation and runtime errors with line numbers and procedure names
 - **Decoupled Parser**: Parser logic is separated for easy unit testing
 
@@ -186,6 +186,21 @@ scriptManager.registerExternalFunction(
     }
 );
 
+// Bulk-register a couple of helpers (initializer_list is supported)
+scriptManager.registerExternalFunctions({
+    {"add", [](const std::vector<Value> &args) {
+        return static_cast<int32_t>(ValueHelper::toInt64(args[0]) +
+                                    ValueHelper::toInt64(args[1]));
+    }},
+    {"triple", [](const std::vector<Value> &args) {
+        return static_cast<int32_t>(ValueHelper::toInt64(args[0]) * 3);
+    }},
+});
+
+// Typed helper (binary int32)
+scriptManager.registerExternalFunctionBinary<int32_t, int32_t, int32_t>(
+    "mul", [](int32_t a, int32_t b) { return a * b; });
+
 // 3. (Optional) Register external variable(s)
 int32_t hostValue = 10;
 scriptManager.registerExternalVariable(
@@ -193,6 +208,11 @@ scriptManager.registerExternalVariable(
     [&]() -> Value { return static_cast<int32_t>(hostValue); },
     [&](const Value& v) { hostValue = std::get<int32_t>(v); }
 );
+
+// Read-only variable helper
+int32_t readonlyMetric = 7;
+scriptManager.registerExternalVariableReadOnly(
+    "metric", [&]() -> Value { return static_cast<int32_t>(readonlyMetric); });
 
 // 4. Load script file
 std::vector<CompilationError> errors;
@@ -234,8 +254,9 @@ Main class for managing scripts:
 - `hasProcedure(name)` - Check if procedure exists
 - `getProcedureNames()` - Get list of all loaded procedures
 - `getProcedureInfo(name, info)` - Get procedure signature
-- `registerExternalFunction(name, callback)` / `unregisterExternalFunction(name)` - Bind or remove host callbacks callable from scripts
-- `registerExternalVariable(name, getter, setter)` / `unregisterExternalVariable(name)` - Expose host variables (setter optional for read-only)
+- `registerExternalFunction(name, callback)` / `registerExternalFunctions({...})` / `unregisterExternalFunction(name)` - Bind or remove host callbacks (bulk registration supported)
+- Typed helpers: `registerExternalFunctionUnary` / `registerExternalFunctionBinary` for common primitive types
+- `registerExternalVariable(name, getter, setter)` / `registerExternalVariableReadOnly(name, getter)` / `unregisterExternalVariable(name)` - Expose host variables (read/write or read-only)
 - `clear()` - Clear all loaded scripts
 
 ### External Function Callback

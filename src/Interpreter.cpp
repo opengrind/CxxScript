@@ -1,4 +1,5 @@
 #include "Interpreter.h"
+#include <limits>
 #include <sstream>
 #include <utility>
 
@@ -8,17 +9,45 @@ namespace Script {
 void Interpreter::Environment::define(const std::string &name,
                                       const Value &value) {
   if (!_scopes.empty()) {
-    _scopes.back()[name] = value;
+    auto &scope = _scopes.back();
+    auto inserted = scope.emplace(name, value);
+    if (!inserted.second) {
+      inserted.first->second = value;
+    } else {
+      _scopeNames.back().push_back(name);
+    }
+    _lookupCache[name] = _scopes.size() - 1;
   } else {
     _globals[name] = value;
+    _lookupCache[name] = GLOBAL;
   }
 }
 
 Value Interpreter::Environment::get(const std::string &name) const {
+  auto cacheIt = _lookupCache.find(name);
+  if (cacheIt != _lookupCache.end()) {
+    size_t idx = cacheIt->second;
+    if (idx == GLOBAL) {
+      auto gIt = _globals.find(name);
+      if (gIt != _globals.end()) {
+        return gIt->second;
+      }
+      _lookupCache.erase(cacheIt);
+    } else if (idx < _scopes.size()) {
+      const auto &scope = _scopes[idx];
+      auto sIt = scope.find(name);
+      if (sIt != scope.end()) {
+        return sIt->second;
+      }
+      _lookupCache.erase(cacheIt);
+    }
+  }
+
   // Search from innermost to outermost scope
-  for (auto it = _scopes.rbegin(); it != _scopes.rend(); ++it) {
-    auto found = it->find(name);
-    if (found != it->end()) {
+  for (size_t i = _scopes.size(); i-- > 0;) {
+    auto found = _scopes[i].find(name);
+    if (found != _scopes[i].end()) {
+      _lookupCache[name] = i;
       return found->second;
     }
   }
@@ -26,6 +55,7 @@ Value Interpreter::Environment::get(const std::string &name) const {
   // Check globals
   auto found = _globals.find(name);
   if (found != _globals.end()) {
+    _lookupCache[name] = GLOBAL;
     return found->second;
   }
 
@@ -39,10 +69,33 @@ Value Interpreter::Environment::get(const std::string &name) const {
 
 void Interpreter::Environment::assign(const std::string &name,
                                       const Value &value) {
+  // Cache-aware fast path
+  auto cacheIt = _lookupCache.find(name);
+  if (cacheIt != _lookupCache.end()) {
+    size_t idx = cacheIt->second;
+    if (idx == GLOBAL) {
+      auto gIt = _globals.find(name);
+      if (gIt != _globals.end()) {
+        gIt->second = value;
+        return;
+      }
+      _lookupCache.erase(cacheIt);
+    } else if (idx < _scopes.size()) {
+      auto &scope = _scopes[idx];
+      auto sIt = scope.find(name);
+      if (sIt != scope.end()) {
+        sIt->second = value;
+        return;
+      }
+      _lookupCache.erase(cacheIt);
+    }
+  }
+
   // Search from innermost to outermost scope
-  for (auto it = _scopes.rbegin(); it != _scopes.rend(); ++it) {
-    auto found = it->find(name);
-    if (found != it->end()) {
+  for (size_t i = _scopes.size(); i-- > 0;) {
+    auto found = _scopes[i].find(name);
+    if (found != _scopes[i].end()) {
+      _lookupCache[name] = i;
       found->second = value;
       return;
     }
@@ -51,6 +104,7 @@ void Interpreter::Environment::assign(const std::string &name,
   // Check globals
   auto found = _globals.find(name);
   if (found != _globals.end()) {
+    _lookupCache[name] = GLOBAL;
     found->second = value;
     return;
   }
@@ -65,13 +119,28 @@ void Interpreter::Environment::assign(const std::string &name,
 }
 
 bool Interpreter::Environment::has(const std::string &name) const {
+  auto cacheIt = _lookupCache.find(name);
+  if (cacheIt != _lookupCache.end()) {
+    size_t idx = cacheIt->second;
+    if (idx == GLOBAL) {
+      if (_globals.find(name) != _globals.end()) {
+        return true;
+      }
+    } else if (idx < _scopes.size() && _scopes[idx].find(name) != _scopes[idx].end()) {
+      return true;
+    }
+  }
+
   for (auto it = _scopes.rbegin(); it != _scopes.rend(); ++it) {
     if (it->find(name) != it->end()) {
+      size_t idx = static_cast<size_t>(_scopes.size() - 1 - (it - _scopes.rbegin()));
+      _lookupCache[name] = idx;
       return true;
     }
   }
 
   if (_globals.find(name) != _globals.end()) {
+    _lookupCache[name] = GLOBAL;
     return true;
   }
 
@@ -82,25 +151,51 @@ bool Interpreter::Environment::has(const std::string &name) const {
   return false;
 }
 
-void Interpreter::Environment::enterScope() { _scopes.emplace_back(); }
+void Interpreter::Environment::enterScope() {
+  _scopes.emplace_back();
+  _scopeNames.emplace_back();
+}
 
 void Interpreter::Environment::exitScope() {
   if (!_scopes.empty()) {
+    if (!_scopeNames.empty()) {
+      for (const auto &name : _scopeNames.back()) {
+        _lookupCache.erase(name);
+      }
+      _scopeNames.pop_back();
+    }
     _scopes.pop_back();
   }
 }
 
 // Interpreter Implementation
 Interpreter::Interpreter()
-    : _currentEnv(new Environment()), _currentProcedure("") {}
+    : _currentEnv(new Environment()), _currentProcedure(""),
+      _callCacheVersion(1) {}
 
 void Interpreter::registerExternalFunction(const std::string &name,
                                            ExternalFunctionCallback callback) {
   _externalFunctions[name] = callback;
+  ++_callCacheVersion;
+}
+
+void Interpreter::registerExternalFunctions(
+    const std::vector<ExternalBinding> &bindings) {
+  for (const auto &b : bindings) {
+    _externalFunctions[b.name] = b.callback;
+  }
+  ++_callCacheVersion;
+}
+
+void Interpreter::registerExternalFunctions(
+    std::initializer_list<ExternalBinding> bindings) {
+  registerExternalFunctions(
+      std::vector<ExternalBinding>(bindings.begin(), bindings.end()));
 }
 
 void Interpreter::unregisterExternalFunction(const std::string &name) {
   _externalFunctions.erase(name);
+  ++_callCacheVersion;
 }
 
 bool Interpreter::hasExternalFunction(const std::string &name) const {
@@ -112,10 +207,17 @@ void Interpreter::registerExternalVariable(const std::string &name,
                                            ExternalVariableSetter setter) {
   _externalVariables[name] = ExternalVariable{std::move(getter),
                                               std::move(setter)};
+  ++_callCacheVersion;
+}
+
+void Interpreter::registerExternalVariableReadOnly(const std::string &name,
+                                                    ExternalVariableGetter getter) {
+  registerExternalVariable(name, std::move(getter), nullptr);
 }
 
 void Interpreter::unregisterExternalVariable(const std::string &name) {
   _externalVariables.erase(name);
+  ++_callCacheVersion;
 }
 
 bool Interpreter::hasExternalVariable(const std::string &name) const {
@@ -126,6 +228,7 @@ void Interpreter::loadScript(ScriptPtr script) {
   for (auto &proc : script->procedures) {
     _procedures[proc->name] = proc;
   }
+  ++_callCacheVersion;
 }
 
 Value Interpreter::executeProcedure(const std::string &name,
@@ -134,14 +237,17 @@ Value Interpreter::executeProcedure(const std::string &name,
   if (it == _procedures.end()) {
     throw std::runtime_error("Procedure not found: " + name);
   }
+  return executeProcedure(it->second, arguments);
+}
 
-  ProcedureDeclPtr proc = it->second;
-  _currentProcedure = name;
+Value Interpreter::executeProcedure(ProcedureDeclPtr proc,
+                                    const std::vector<Value> &arguments) {
+  _currentProcedure = proc->name;
 
   // Check argument count
   if (arguments.size() != proc->parameters.size()) {
     std::stringstream ss;
-    ss << "Procedure '" << name << "' expects " << proc->parameters.size()
+    ss << "Procedure '" << proc->name << "' expects " << proc->parameters.size()
        << " arguments, got " << arguments.size();
     throw runtimeError(ss.str(), proc->line, proc->column);
   }
@@ -447,19 +553,52 @@ Value Interpreter::evaluateCall(CallExpr *expr) {
     return result;
   }
 
+  // Inline cache for procedures / externals
+  if (expr->cacheVersion == _callCacheVersion) {
+    if (expr->cachedIsProcedure) {
+      std::vector<Value> args;
+      args.reserve(expr->arguments.size());
+      for (auto &argExpr : expr->arguments) {
+        args.push_back(evaluate(argExpr));
+      }
+      if (auto proc = expr->cachedProcedure.lock()) {
+        return executeProcedure(proc, args);
+      }
+    }
+    if (expr->cachedIsExternal && expr->cachedExternal) {
+      std::vector<Value> args;
+      args.reserve(expr->arguments.size());
+      for (auto &argExpr : expr->arguments) {
+        args.push_back(evaluate(argExpr));
+      }
+      return expr->cachedExternal(args);
+    }
+  }
+
   // Check if it's a procedure call
-  if (hasProcedure(expr->functionName)) {
+  if (auto it = _procedures.find(expr->functionName); it != _procedures.end()) {
+    expr->cacheVersion = _callCacheVersion;
+    expr->cachedIsProcedure = true;
+    expr->cachedIsExternal = false;
+    expr->cachedProcedure = it->second;
     std::vector<Value> args;
+    args.reserve(expr->arguments.size());
     for (auto &argExpr : expr->arguments) {
       args.push_back(evaluate(argExpr));
     }
-    return executeProcedure(expr->functionName, args);
+    return executeProcedure(it->second, args);
   }
 
   // Check if it's a registered external function
   auto extIt = _externalFunctions.find(expr->functionName);
   if (extIt != _externalFunctions.end()) {
+    expr->cacheVersion = _callCacheVersion;
+    expr->cachedIsProcedure = false;
+    expr->cachedIsExternal = true;
+    expr->cachedExternal = extIt->second;
+
     std::vector<Value> args;
+    args.reserve(expr->arguments.size());
     for (auto &argExpr : expr->arguments) {
       args.push_back(evaluate(argExpr));
     }
@@ -775,6 +914,10 @@ Value Interpreter::convertToType(const Value &val, const TypeInfo &targetType) {
   if (targetType.isArray) {
     if (!ValueHelper::isArray(val)) {
       throw std::runtime_error("Expected array value");
+    }
+    TypeInfo elemType = ValueHelper::arrayElementType(val);
+    if (elemType.baseType == targetType.baseType) {
+      return val; // already correct element type
     }
     const auto &elems = ValueHelper::arrayElements(val);
     std::vector<Value> converted;

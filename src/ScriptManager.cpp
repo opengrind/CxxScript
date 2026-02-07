@@ -209,6 +209,16 @@ void ScriptManager::registerExternalFunction(
   _interpreter->registerExternalFunction(name, callback);
 }
 
+void ScriptManager::registerExternalFunctions(
+    const std::vector<ExternalBinding> &bindings) {
+  _interpreter->registerExternalFunctions(bindings);
+}
+
+void ScriptManager::registerExternalFunctions(
+    std::initializer_list<ExternalBinding> bindings) {
+  _interpreter->registerExternalFunctions(bindings);
+}
+
 void ScriptManager::unregisterExternalFunction(const std::string &name) {
   _interpreter->unregisterExternalFunction(name);
 }
@@ -222,6 +232,11 @@ void ScriptManager::registerExternalVariable(
     ExternalVariableSetter setter) {
   _interpreter->registerExternalVariable(name, std::move(getter),
                                          std::move(setter));
+}
+
+void ScriptManager::registerExternalVariableReadOnly(
+    const std::string &name, ExternalVariableGetter getter) {
+  _interpreter->registerExternalVariableReadOnly(name, std::move(getter));
 }
 
 void ScriptManager::unregisterExternalVariable(const std::string &name) {
