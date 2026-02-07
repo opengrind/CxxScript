@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 # Compiler flags
 if(MSVC)
     add_compile_options(/W4)
@@ -216,19 +219,36 @@ add_custom_target(run_example
 )
 
 # Installation rules
+set(CXXSCRIPT_INSTALL_INCLUDEDIR "${CMAKE_INSTALL_INCLUDEDIR}/CxxScript")
+set(CXXSCRIPT_INSTALL_SCRIPTDIR "${CMAKE_INSTALL_DATADIR}/CxxScript/scripts")
+set(CXXSCRIPT_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/CxxScript")
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CxxScriptConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/CxxScriptConfig.cmake
+    INSTALL_DESTINATION ${CXXSCRIPT_INSTALL_CMAKEDIR}
+    PATH_VARS CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_DATADIR
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/CxxScriptConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
 install(TARGETS CxxScript
     EXPORT CxxScriptTargets
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    INCLUDES DESTINATION include
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 install(FILES ${LIBRARY_HEADERS}
-    DESTINATION include/CxxScript
+    DESTINATION ${CXXSCRIPT_INSTALL_INCLUDEDIR}
 )
 
 install(DIRECTORY ${SCRIPTS_DIR}/
-    DESTINATION share/CxxScript/scripts
+    DESTINATION ${CXXSCRIPT_INSTALL_SCRIPTDIR}
     FILES_MATCHING PATTERN "*.script"
 )
 
@@ -236,8 +256,22 @@ install(DIRECTORY ${SCRIPTS_DIR}/
 install(EXPORT CxxScriptTargets
     FILE CxxScriptTargets.cmake
     NAMESPACE CxxScript::
-    DESTINATION lib/cmake/CxxScript
+    DESTINATION ${CXXSCRIPT_INSTALL_CMAKEDIR}
 )
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/CxxScriptConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/CxxScriptConfigVersion.cmake
+    DESTINATION ${CXXSCRIPT_INSTALL_CMAKEDIR}
+)
+
+set(CPACK_PACKAGE_NAME "CxxScript")
+set(CPACK_PACKAGE_VENDOR "CxxScript Project")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_CONTACT "CxxScript Maintainers")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${CPACK_PACKAGE_CONTACT}")
+
+include(CPack)
 
 # Print configuration
 message(STATUS "")

@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/CxxScriptTargets.cmake")
+
+set(CXXSCRIPT_INCLUDE_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@/CxxScript")
+set(CXXSCRIPT_SCRIPT_DIR "@PACKAGE_CMAKE_INSTALL_DATADIR@/CxxScript/scripts")
+
+check_required_components(CxxScript)

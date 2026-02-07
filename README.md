@@ -372,6 +372,49 @@ cmake --build . --target run_example
 ./example_usage
 ```
 
+## Installation (development use)
+
+Install to standard locations (headers + static lib + scripts + CMake package config):
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+sudo cmake --install build
+```
+
+Key install locations (GNUInstallDirs):
+- Headers: `<prefix>/include/CxxScript`
+- Library: `<prefix>/lib/libCxxScript.a`
+- Scripts: `<prefix>/share/CxxScript/scripts`
+- CMake package: `<prefix>/lib/cmake/CxxScript/CxxScriptConfig.cmake`
+
+Consume from another CMake project after install:
+
+```cmake
+find_package(CxxScript CONFIG REQUIRED)
+add_executable(app main.cpp)
+target_link_libraries(app PRIVATE CxxScript::CxxScript)
+```
+
+Custom prefix for devices:
+
+```bash
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX=/opt/cxxscript -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+sudo cmake --install build
+```
+
+## Packaging (CPack)
+
+Generate DEB/RPM/tarball artifacts from the build tree:
+
+```bash
+cmake --build build --target package
+# or: (from build dir) cpack -G DEB   # alternatives: RPM, TGZ
+```
+
+Resulting packages contain the installed headers, library, scripts, and CMake config for downstream `find_package` usage.
+
 ### Manual compilation (if needed):
 
 ```bash
