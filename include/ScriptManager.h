@@ -75,6 +75,17 @@ public:
   // Check if an external function is registered
   bool hasExternalFunction(const std::string &name) const;
 
+  // Register an external variable that scripts can read/write
+  void registerExternalVariable(const std::string &name,
+                                ExternalVariableGetter getter,
+                                ExternalVariableSetter setter = nullptr);
+
+  // Unregister an external variable
+  void unregisterExternalVariable(const std::string &name);
+
+  // Check if an external variable is registered
+  bool hasExternalVariable(const std::string &name) const;
+
   // Clear all loaded scripts
   void clear();
 

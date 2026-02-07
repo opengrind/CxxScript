@@ -1,5 +1,6 @@
 #include "Interpreter.h"
 #include <sstream>
+#include <utility>
 
 namespace Script {
 
@@ -104,6 +105,21 @@ void Interpreter::unregisterExternalFunction(const std::string &name) {
 
 bool Interpreter::hasExternalFunction(const std::string &name) const {
   return _externalFunctions.find(name) != _externalFunctions.end();
+}
+
+void Interpreter::registerExternalVariable(const std::string &name,
+                                           ExternalVariableGetter getter,
+                                           ExternalVariableSetter setter) {
+  _externalVariables[name] = ExternalVariable{std::move(getter),
+                                              std::move(setter)};
+}
+
+void Interpreter::unregisterExternalVariable(const std::string &name) {
+  _externalVariables.erase(name);
+}
+
+bool Interpreter::hasExternalVariable(const std::string &name) const {
+  return _externalVariables.find(name) != _externalVariables.end();
 }
 
 void Interpreter::loadScript(ScriptPtr script) {
@@ -247,8 +263,19 @@ Value Interpreter::evaluateLiteral(LiteralExpr *expr) { return expr->value; }
 Value Interpreter::evaluateVariable(VariableExpr *expr) {
   try {
     return _currentEnv->get(expr->name);
-  } catch (const std::runtime_error &e) {
-    throw runtimeError(e.what(), expr->line, expr->column);
+  } catch (const std::runtime_error &) {
+    auto extIt = _externalVariables.find(expr->name);
+    if (extIt != _externalVariables.end()) {
+      if (!extIt->second.getter) {
+        throw runtimeError(
+            "External variable '" + expr->name + "' has no getter",
+            expr->line, expr->column);
+      }
+      return extIt->second.getter();
+    }
+
+    throw runtimeError("Undefined variable: " + expr->name, expr->line,
+                       expr->column);
   }
 }
 
@@ -529,8 +556,52 @@ void Interpreter::executeAssign(AssignStmt *stmt) {
                           ValueHelper::divide(currentValue, value));
       break;
     }
-  } catch (const std::runtime_error &e) {
-    throw runtimeError(e.what(), stmt->line, stmt->column);
+  } catch (const std::runtime_error &) {
+    auto extIt = _externalVariables.find(stmt->variableName);
+    if (extIt == _externalVariables.end()) {
+      throw runtimeError("Undefined variable: " + stmt->variableName,
+                         stmt->line, stmt->column);
+    }
+
+    auto &extVar = extIt->second;
+    if (!extVar.setter) {
+      throw runtimeError("External variable '" + stmt->variableName +
+                             "' is read-only",
+                         stmt->line, stmt->column);
+    }
+
+    if (stmt->op == AssignStmt::Operator::ASSIGN) {
+      extVar.setter(value);
+      return;
+    }
+
+    if (!extVar.getter) {
+      throw runtimeError("External variable '" + stmt->variableName +
+                             "' cannot be read",
+                         stmt->line, stmt->column);
+    }
+
+    Value currentValue = extVar.getter();
+    Value result;
+    switch (stmt->op) {
+    case AssignStmt::Operator::ASSIGN:
+      result = value;
+      break;
+    case AssignStmt::Operator::PLUS_ASSIGN:
+      result = ValueHelper::add(currentValue, value);
+      break;
+    case AssignStmt::Operator::MINUS_ASSIGN:
+      result = ValueHelper::subtract(currentValue, value);
+      break;
+    case AssignStmt::Operator::MULT_ASSIGN:
+      result = ValueHelper::multiply(currentValue, value);
+      break;
+    case AssignStmt::Operator::DIV_ASSIGN:
+      result = ValueHelper::divide(currentValue, value);
+      break;
+    }
+
+    extVar.setter(result);
   }
 }
 

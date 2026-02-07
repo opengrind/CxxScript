@@ -1,6 +1,7 @@
 #include "ScriptManager.h"
 #include <fstream>
 #include <sstream>
+#include <utility>
 
 namespace Script {
 
@@ -214,6 +215,21 @@ void ScriptManager::unregisterExternalFunction(const std::string &name) {
 
 bool ScriptManager::hasExternalFunction(const std::string &name) const {
   return _interpreter->hasExternalFunction(name);
+}
+
+void ScriptManager::registerExternalVariable(
+    const std::string &name, ExternalVariableGetter getter,
+    ExternalVariableSetter setter) {
+  _interpreter->registerExternalVariable(name, std::move(getter),
+                                         std::move(setter));
+}
+
+void ScriptManager::unregisterExternalVariable(const std::string &name) {
+  _interpreter->unregisterExternalVariable(name);
+}
+
+bool ScriptManager::hasExternalVariable(const std::string &name) const {
+  return _interpreter->hasExternalVariable(name);
 }
 
 void ScriptManager::clear() {

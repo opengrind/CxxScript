@@ -65,6 +65,33 @@ if (manager.hasExternalFunction("add")) {
 manager.unregisterExternalFunction("add");
 ```
 
+## External Variables (New)
+
+Expose host values to scripts with dedicated getters/setters.
+
+```cpp
+using ExternalVariableGetter = std::function<Value()>;
+using ExternalVariableSetter = std::function<void(const Value&)>; // optional
+
+void registerExternalVariable(const std::string &name,
+                              ExternalVariableGetter getter,
+                              ExternalVariableSetter setter = nullptr);
+void unregisterExternalVariable(const std::string &name);
+bool hasExternalVariable(const std::string &name) const;
+```
+
+**Usage Example:**
+
+```cpp
+int32_t sharedCounter = 10;
+manager.registerExternalVariable(
+    "counter",
+    [&]() -> Value { return static_cast<int32_t>(sharedCounter); },
+    [&](const Value &v) { sharedCounter = std::get<int32_t>(v); });
+
+// In script: counter += 5; return counter; // updates sharedCounter
+```
+
 ## Benefits
 
 1. **Cleaner Code**: Each function has its own lambda/callback without needing a dispatcher
@@ -102,6 +129,13 @@ New test file: `test_external_functions.cpp`
 - ✅ Function overwrite behavior
 - ✅ Unregister functionality
 - ✅ Mixed internal and external calls
-- ✅ Different return types (int32, string, bool)
+- ✅ Different return types (int32, string, bool, double)
+- ✅ Array arguments/returns
+
+New test file: `test_external_variables.cpp`
+- ✅ Read/write external variable bridge
+- ✅ Read-only protection on setter-less variables
+- ✅ Compound assignments on external values
+- ✅ Coverage for string, bool, double, array variables
 
 All existing tests updated and passing (6/6 test suites).

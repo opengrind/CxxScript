@@ -1,4 +1,5 @@
 #include "ScriptManager.h"
+#include "DataTypes.h"
 #include <gtest/gtest.h>
 
 using namespace Script;
@@ -208,6 +209,64 @@ TEST(ExternalFunctionsTest, ExternalFunctionReturningDifferentTypes) {
 
   std::cout << "  ✓ External functions with different return types passed"
             << std::endl;
+}
+
+TEST(ExternalFunctionsTest, DoubleArgumentsAndReturn) {
+  std::string source = "double area(double r) { return circle(r); }";
+
+  ScriptManager manager;
+  manager.registerExternalFunction(
+      "circle", [](const std::vector<Value> &args) -> Value {
+        double r = std::get<double>(args[0]);
+        return 3.5 * r * r;
+      });
+
+  std::vector<CompilationError> errors;
+  bool success = manager.loadScriptSource(source, "double_ext.script", errors);
+  EXPECT_TRUE(success);
+
+  Value result;
+  std::string errorMsg;
+  success = manager.executeProcedure("area", {2.0}, result, errorMsg);
+  EXPECT_TRUE(success);
+  EXPECT_DOUBLE_EQ(std::get<double>(result), 14.0);
+}
+
+TEST(ExternalFunctionsTest, ArrayReturnAndArgument) {
+  std::string source =
+      "int32 useReturn() { int32[] arr = makeArray(); return arr[0] + arr[1] + len(arr); }"
+      "int32 useArg() { int32[] local = [3,4,5]; return head(local); }";
+
+  ScriptManager manager;
+  manager.registerExternalFunction(
+      "makeArray", [](const std::vector<Value> & /*args*/) -> Value {
+        return ValueHelper::createArray(
+            TypeInfo(DataType::INT32),
+            {static_cast<int32_t>(5), static_cast<int32_t>(6)});
+      });
+
+  manager.registerExternalFunction(
+      "head", [](const std::vector<Value> &args) -> Value {
+        const auto &elems = ValueHelper::arrayElements(args[0]);
+        return elems.empty() ? static_cast<int32_t>(0)
+                             : std::get<int32_t>(elems.front());
+      });
+
+  std::vector<CompilationError> errors;
+  bool success = manager.loadScriptSource(source, "array_ext.script", errors);
+  EXPECT_TRUE(success);
+
+  Value result;
+  std::string errorMsg;
+
+  success = manager.executeProcedure("useReturn", {}, result, errorMsg);
+  EXPECT_TRUE(success);
+  // 5 + 6 + len=2 => 13
+  EXPECT_EQ(std::get<int32_t>(result), 13);
+
+  success = manager.executeProcedure("useArg", {}, result, errorMsg);
+  EXPECT_TRUE(success);
+  EXPECT_EQ(std::get<int32_t>(result), 3);
 }
 
 TEST(ExternalFunctionsTest, ClearResetsProceduresAndExternalFunctions) {

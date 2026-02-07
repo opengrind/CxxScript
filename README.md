@@ -27,6 +27,7 @@ cd build && ctest
 - **Compound Assignments**: +=, -=, *=, /=
 - **Procedure Calls**: Scripts can call other procedures defined in the same or different script files
 - **External Function Callbacks**: Call C++ functions from scripts with generic argument passing
+- **External Variables**: Expose host variables to scripts via getters/setters (read/write or read-only)
 - **Comprehensive Error Reporting**: Compilation and runtime errors with line numbers and procedure names
 - **Decoupled Parser**: Parser logic is separated for easy unit testing
 
@@ -176,18 +177,24 @@ using namespace Script;
 // 1. Create script manager
 ScriptManager scriptManager;
 
-// 2. (Optional) Set up external function callback
-scriptManager.setExternalFunctionCallback(
-    [](const std::string& name, const std::vector<Value>& args) -> Value {
-        if (name == "myFunction") {
-            // Handle external function call
-            return static_cast<int32_t>(42);
-        }
-        throw std::runtime_error("Unknown function: " + name);
+// 2. (Optional) Register external function(s)
+scriptManager.registerExternalFunction(
+    "myFunction",
+    [](const std::vector<Value>& args) -> Value {
+        // Handle external function call
+        return static_cast<int32_t>(42 + std::get<int32_t>(args[0]));
     }
 );
 
-// 3. Load script file
+// 3. (Optional) Register external variable(s)
+int32_t hostValue = 10;
+scriptManager.registerExternalVariable(
+    "sharedValue",
+    [&]() -> Value { return static_cast<int32_t>(hostValue); },
+    [&](const Value& v) { hostValue = std::get<int32_t>(v); }
+);
+
+// 4. Load script file
 std::vector<CompilationError> errors;
 if (!scriptManager.loadScriptFile("example.script", errors)) {
     // Handle compilation errors
@@ -197,7 +204,7 @@ if (!scriptManager.loadScriptFile("example.script", errors)) {
     return;
 }
 
-// 4. Execute a procedure
+// 5. Execute a procedure
 std::vector<Value> arguments = {
     static_cast<int32_t>(10),
     static_cast<int32_t>(20)
@@ -228,22 +235,95 @@ Main class for managing scripts:
 - `getProcedureNames()` - Get list of all loaded procedures
 - `getProcedureInfo(name, info)` - Get procedure signature
 - `registerExternalFunction(name, callback)` / `unregisterExternalFunction(name)` - Bind or remove host callbacks callable from scripts
+- `registerExternalVariable(name, getter, setter)` / `unregisterExternalVariable(name)` - Expose host variables (setter optional for read-only)
 - `clear()` - Clear all loaded scripts
 
 ### External Function Callback
 
 ```cpp
 using ExternalFunctionCallback = std::function<Value(
-    const std::string& functionName,
     const std::vector<Value>& arguments
 )>;
 ```
 
-Your C++ application receives:
-- `functionName`: Name of the function called from script
-- `arguments`: Vector of argument values
+Your C++ application receives the argument values and returns a `Value`.
+
+### External Variables
+
+```cpp
+using ExternalVariableGetter = std::function<Value()>;
+using ExternalVariableSetter = std::function<void(const Value&)>; // optional
+```
+
+- Getter is required; setter is optional for read-only values.
+- Compound assignments (`+=`, etc.) require both getter and setter.
 
 Return the result as a `Value`.
+
+## External Integration Examples
+
+### External Functions
+
+```cpp
+ScriptManager manager;
+
+// Register multiple functions
+manager.registerExternalFunction("addOne", [](const std::vector<Value>& args) {
+    return static_cast<int32_t>(std::get<int32_t>(args[0]) + 1);
+});
+
+manager.registerExternalFunction("greet", [](const std::vector<Value>& args) {
+    return std::string("Hello, ") + std::get<std::string>(args[0]);
+});
+
+// Script can call them directly
+// script:
+//   int32 run(int32 x) {
+//     string msg = greet("world"); // -> "Hello, world"
+//     return addOne(x);             // -> x + 1
+//   }
+```
+
+Notes:
+- Arguments are passed as `Value` and must be unwrapped with `std::get<T>`. Use the script's expected type.
+- You can overwrite a function by re-registering the same name.
+- Return any supported scalar or array `Value`.
+
+### External Variables
+
+```cpp
+int32_t health = 100;
+bool isGodMode = false;
+
+ScriptManager manager;
+
+// Read/write variable
+manager.registerExternalVariable(
+    "health",
+    [&]() -> Value { return static_cast<int32_t>(health); },
+    [&](const Value& v) { health = std::get<int32_t>(v); }
+);
+
+// Read-only variable
+manager.registerExternalVariable(
+    "godMode",
+    [&]() -> Value { return isGodMode; }
+);
+
+// script:
+//   void damage(int32 amount) {
+//     if (!godMode) { health -= amount; }
+//   }
+//   int32 heal(int32 amount) {
+//     health += amount;
+//     return health;
+//   }
+```
+
+Notes:
+- Setter is optional; without it the variable is read-only and assignments will raise a runtime error.
+- Compound assignments (`+=`, `-=`, `*=`, `/=`) need both getter and setter so the interpreter can read-modify-write.
+- Types must match what the script expects; use `std::get<T>` and return the proper `Value` to avoid runtime conversion errors.
 
 ## Building and Testing
 

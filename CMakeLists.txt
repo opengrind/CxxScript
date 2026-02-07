@@ -175,6 +175,12 @@ set_target_properties(test_arrays PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )
 
+add_executable(test_external_variables ${TESTS_DIR}/test_external_variables.cpp)
+target_link_libraries(test_external_variables PRIVATE CxxScript GTest::gtest_main)
+set_target_properties(test_external_variables PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+
 # Google Test integration
 include(GoogleTest)
 gtest_discover_tests(test_lexer WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -190,6 +196,7 @@ gtest_discover_tests(test_escape_sequences WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 gtest_discover_tests(test_control_flow WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 gtest_discover_tests(test_bitwise WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 gtest_discover_tests(test_arrays WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+gtest_discover_tests(test_external_variables WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # Custom target to run all tests
 add_custom_target(run_tests
@@ -197,7 +204,7 @@ add_custom_target(run_tests
     DEPENDS test_lexer test_parser test_interpreter test_error_handling
     test_comprehensive test_external_functions test_multi_file
     test_string_concat test_real_world_app test_escape_sequences
-    test_control_flow test_bitwise test_arrays
+    test_control_flow test_bitwise test_arrays test_external_variables
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 

@@ -33,7 +33,11 @@ class ContinueException : public std::exception {};
 
 // External function callback
 using ExternalFunctionCallback =
-    std::function<Value(const std::vector<Value> &)>;
+  std::function<Value(const std::vector<Value> &)>;
+
+// External variable callbacks
+using ExternalVariableGetter = std::function<Value()>;
+using ExternalVariableSetter = std::function<void(const Value &)>;
 
 class Interpreter {
 public:
@@ -48,6 +52,17 @@ public:
 
   // Check if an external function is registered
   bool hasExternalFunction(const std::string &name) const;
+
+  // Register an external variable by name (getter required, setter optional)
+  void registerExternalVariable(const std::string &name,
+                                ExternalVariableGetter getter,
+                                ExternalVariableSetter setter = nullptr);
+
+  // Unregister an external variable
+  void unregisterExternalVariable(const std::string &name);
+
+  // Check if an external variable is registered
+  bool hasExternalVariable(const std::string &name) const;
 
   // Load a script (add procedures to the interpreter)
   void loadScript(ScriptPtr script);
@@ -84,6 +99,11 @@ private:
 
   std::unordered_map<std::string, ProcedureDeclPtr> _procedures;
   std::unordered_map<std::string, ExternalFunctionCallback> _externalFunctions;
+  struct ExternalVariable {
+    ExternalVariableGetter getter;
+    ExternalVariableSetter setter;
+  };
+  std::unordered_map<std::string, ExternalVariable> _externalVariables;
   Environment *_currentEnv;
   std::string _currentProcedure;
 
