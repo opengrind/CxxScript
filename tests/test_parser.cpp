@@ -111,3 +111,43 @@ TEST(ParserTest, Expressions) {
 
   ASSERT_EQ(script->procedures.size(), 1);
 }
+
+TEST(ParserTest, ArrayTypesAndLiterals) {
+  std::string source = R"(
+        int32[] echo(int32[] input) {
+            int32[] copy = [1, 2, 3];
+            int32 first = copy[0];
+            return input;
+        }
+    )";
+
+  Lexer lexer(source, "test");
+  auto tokens = lexer.tokenize();
+
+  Parser parser(tokens, "test");
+  auto script = parser.parse();
+
+  ASSERT_EQ(script->procedures.size(), 1);
+  auto proc = script->procedures[0];
+  EXPECT_TRUE(proc->returnType.isArray);
+  EXPECT_EQ(proc->returnType.baseType, DataType::INT32);
+  ASSERT_EQ(proc->parameters.size(), 1);
+  EXPECT_TRUE(proc->parameters[0].type.isArray);
+
+  auto *block = dynamic_cast<BlockStmt *>(proc->body.get());
+  ASSERT_NE(block, nullptr);
+  ASSERT_GE(block->statements.size(), 2u);
+
+  auto *varCopy = dynamic_cast<VarDeclStmt *>(block->statements[0].get());
+  ASSERT_NE(varCopy, nullptr);
+  EXPECT_TRUE(varCopy->type.isArray);
+  EXPECT_EQ(varCopy->type.baseType, DataType::INT32);
+  auto *literal = dynamic_cast<ArrayLiteralExpr *>(varCopy->initializer.get());
+  ASSERT_NE(literal, nullptr);
+  EXPECT_EQ(literal->elements.size(), 3u);
+
+  auto *varFirst = dynamic_cast<VarDeclStmt *>(block->statements[1].get());
+  ASSERT_NE(varFirst, nullptr);
+  auto *indexExpr = dynamic_cast<IndexExpr *>(varFirst->initializer.get());
+  ASSERT_NE(indexExpr, nullptr);
+}

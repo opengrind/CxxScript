@@ -20,9 +20,16 @@ void Lexer::initKeywords() {
   _keywords["uint32"] = TokenType::UINT32;
   _keywords["int64"] = TokenType::INT64;
   _keywords["uint64"] = TokenType::UINT64;
+  _keywords["double"] = TokenType::DOUBLE;
   _keywords["string"] = TokenType::STRING;
   _keywords["bool"] = TokenType::BOOL;
   _keywords["void"] = TokenType::VOID;
+  _keywords["switch"] = TokenType::SWITCH;
+  _keywords["case"] = TokenType::CASE;
+  _keywords["default"] = TokenType::DEFAULT;
+  _keywords["do"] = TokenType::DO;
+  _keywords["break"] = TokenType::BREAK;
+  _keywords["continue"] = TokenType::CONTINUE;
   _keywords["if"] = TokenType::IF;
   _keywords["else"] = TokenType::ELSE;
   _keywords["while"] = TokenType::WHILE;
@@ -105,23 +112,35 @@ Token Lexer::nextToken() {
   case '<':
     if (match('='))
       return makeToken(TokenType::LESS_EQUAL, "<=");
+    if (match('<'))
+      return makeToken(TokenType::LSHIFT, "<<");
     return makeToken(TokenType::LESS_THAN, "<");
   case '>':
     if (match('='))
       return makeToken(TokenType::GREATER_EQUAL, ">=");
+    if (match('>'))
+      return makeToken(TokenType::RSHIFT, ">>");
     return makeToken(TokenType::GREATER_THAN, ">");
   case '&':
     if (match('&'))
       return makeToken(TokenType::AND, "&&");
-    break;
+    return makeToken(TokenType::BIT_AND, "&");
   case '|':
     if (match('|'))
       return makeToken(TokenType::OR, "||");
-    break;
+    return makeToken(TokenType::BIT_OR, "|");
   case '(':
     return makeToken(TokenType::LPAREN, "(");
+  case '[':
+    return makeToken(TokenType::LBRACKET, "[");
+  case '^':
+    return makeToken(TokenType::BIT_XOR, "^");
+  case '~':
+    return makeToken(TokenType::BIT_NOT, "~");
   case ')':
     return makeToken(TokenType::RPAREN, ")");
+  case ']':
+    return makeToken(TokenType::RBRACKET, "]");
   case '{':
     return makeToken(TokenType::LBRACE, "{");
   case '}':
@@ -130,6 +149,10 @@ Token Lexer::nextToken() {
     return makeToken(TokenType::SEMICOLON, ";");
   case ',':
     return makeToken(TokenType::COMMA, ",");
+  case ':':
+    return makeToken(TokenType::COLON, ":");
+  case '?':
+    return makeToken(TokenType::QUESTION, "?");
   }
 
   Token errorToken = makeToken(TokenType::UNKNOWN, std::string(1, c));
@@ -229,14 +252,34 @@ Token Lexer::number() {
   int startColumn = _column;
   size_t start = _current;
 
-  while (isDigit(peek())) {
-    advance();
+  bool seenDot = false;
+  while (true) {
+    if (isDigit(peek())) {
+      advance();
+      continue;
+    }
+
+    if (!seenDot && peek() == '.' && isDigit(peekNext())) {
+      seenDot = true;
+      advance();
+      continue;
+    }
+
+    break;
   }
 
   std::string numStr = _source.substr(start, _current - start);
-  Token token = makeToken(TokenType::INT_LITERAL, numStr);
+  bool isFloat = seenDot;
+
+  Token token = makeToken(isFloat ? TokenType::FLOAT_LITERAL
+                                  : TokenType::INT_LITERAL,
+                          numStr);
   token.column = startColumn;
-  token.intValue = std::stoll(numStr);
+  if (isFloat) {
+    token.doubleValue = std::stod(numStr);
+  } else {
+    token.intValue = std::stoll(numStr);
+  }
   return token;
 }
 

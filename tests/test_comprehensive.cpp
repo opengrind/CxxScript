@@ -84,6 +84,149 @@ TEST(ComprehensiveTest, AllIntegerTypes) {
 
 }
 
+TEST(ComprehensiveTest, FloatingPointBasics) {
+
+  std::string source =
+      "double add(double a, double b) { return a + b; }"
+      "double mixed(double a, int32 b) { double t = a * 2.5; return t + b; }"
+      "double negate(double a) { return -a; }"
+      "double literalInit() { double x = 1.25; double y = 2.75; return x + y; }";
+
+  ScriptManager manager;
+  std::vector<CompilationError> errors;
+  bool success = manager.loadScriptSource(source, "float.script", errors);
+  EXPECT_TRUE(success);
+
+  std::string errorMsg;
+  Value result;
+
+  // Basic addition
+  std::vector<Value> addArgs = {1.5, 2.25};
+  success = manager.executeProcedure("add", addArgs, result, errorMsg);
+  EXPECT_TRUE(success) << errorMsg;
+  EXPECT_NEAR(std::get<double>(result), 3.75, 1e-9);
+
+  // Mixing integers and doubles
+  std::vector<Value> mixedArgs = {1.2, static_cast<int32_t>(3)};
+  success = manager.executeProcedure("mixed", mixedArgs, result, errorMsg);
+  EXPECT_TRUE(success) << errorMsg;
+  EXPECT_NEAR(std::get<double>(result), 6.0, 1e-9);
+
+  // Unary negate preserves double
+  std::vector<Value> negArgs = {4.0};
+  success = manager.executeProcedure("negate", negArgs, result, errorMsg);
+  EXPECT_TRUE(success) << errorMsg;
+  EXPECT_NEAR(std::get<double>(result), -4.0, 1e-9);
+
+  // Literal initialization
+  success = manager.executeProcedure("literalInit", {}, result, errorMsg);
+  EXPECT_TRUE(success) << errorMsg;
+  EXPECT_NEAR(std::get<double>(result), 4.0, 1e-9);
+
+}
+
+TEST(ComprehensiveTest, FloatingPointComparisonsAndAssignments) {
+
+  std::string source =
+      "double compare(double a, double b) {"
+      "  double sum = a + b;"
+      "  double diff = a - b;"
+      "  double prod = a * b;"
+      "  double ratio = a / b;"
+      "  if (sum > prod) { return sum; }"
+      "  if (diff < 0.0) { return ratio; }"
+      "  return prod;"
+      "}"
+      "int32 truncate(double v) { int32 x = v; return x; }"
+      "double widen(int32 v) { double x = v; return x + 0.5; }";
+
+  ScriptManager manager;
+  std::vector<CompilationError> errors;
+  bool success = manager.loadScriptSource(source, "float_compare.script", errors);
+  EXPECT_TRUE(success);
+
+  std::string errorMsg;
+  Value result;
+
+  // Comparison paths (sum > prod)
+  success = manager.executeProcedure("compare", {1.0, 1.5}, result, errorMsg);
+  EXPECT_TRUE(success) << errorMsg;
+  EXPECT_NEAR(std::get<double>(result), 2.5, 1e-9);
+
+  // diff < 0 -> returns ratio
+  success = manager.executeProcedure("compare", {2.0, 4.0}, result, errorMsg);
+  EXPECT_TRUE(success) << errorMsg;
+  EXPECT_NEAR(std::get<double>(result), 0.5, 1e-9);
+
+  // Truncation when binding to int
+  success = manager.executeProcedure("truncate", {3.9}, result, errorMsg);
+  EXPECT_TRUE(success) << errorMsg;
+  EXPECT_EQ(std::get<int32_t>(result), 3);
+
+  // Widening int to double via var init
+  success = manager.executeProcedure("widen", {static_cast<int32_t>(2)}, result, errorMsg);
+  EXPECT_TRUE(success) << errorMsg;
+  EXPECT_NEAR(std::get<double>(result), 2.5, 1e-9);
+}
+
+TEST(ComprehensiveTest, FloatingPointModuloNotSupported) {
+
+  std::string source = "double badMod(double a, double b) { return a % b; }";
+
+  ScriptManager manager;
+  std::vector<CompilationError> errors;
+  bool success = manager.loadScriptSource(source, "float_mod.script", errors);
+  EXPECT_TRUE(success);
+
+  std::string errorMsg;
+  Value result;
+
+  success = manager.executeProcedure("badMod", {2.5, 1.0}, result, errorMsg);
+  EXPECT_FALSE(success);
+  EXPECT_NE(errorMsg.find("Modulo not supported for floating point"), std::string::npos);
+}
+
+TEST(ComprehensiveTest, FloatingPointPrecisionAndDivisionByZero) {
+
+  std::string source =
+      "double accumulate() {"
+      "  double x = 0.0;"
+      "  int32 i = 0;"
+      "  for (i = 0; i < 10; i += 1) { x = x + 0.1; }"
+      "  return x;"
+      "}"
+      "double cancel() {"
+      "  double x = 1.0;"
+      "  x = x + 0.000001;"
+      "  x = x - 0.000001;"
+      "  return x;"
+      "}"
+      "double reciprocal(double v) { return 1.0 / v; }";
+
+  ScriptManager manager;
+  std::vector<CompilationError> errors;
+  bool success = manager.loadScriptSource(source, "float_prec.script", errors);
+  EXPECT_TRUE(success);
+
+  std::string errorMsg;
+  Value result;
+
+  // Accumulated rounding should stay close to 1.0
+  success = manager.executeProcedure("accumulate", {}, result, errorMsg);
+  EXPECT_TRUE(success) << errorMsg;
+  EXPECT_NEAR(std::get<double>(result), 1.0, 1e-9);
+
+  // Cancellation should keep value near the original
+  success = manager.executeProcedure("cancel", {}, result, errorMsg);
+  EXPECT_TRUE(success) << errorMsg;
+  EXPECT_NEAR(std::get<double>(result), 1.0, 1e-12);
+
+  // Division by zero should be rejected (no inf/NaN produced)
+  success = manager.executeProcedure("reciprocal", {0.0}, result, errorMsg);
+  EXPECT_FALSE(success);
+  EXPECT_NE(errorMsg.find("Division by zero"), std::string::npos);
+}
+
 TEST(ComprehensiveTest, TypeConversions) {
 
   std::string source = "int32 convert(int8 small) {"
@@ -416,8 +559,53 @@ TEST(ComprehensiveTest, LogicalEvaluationWithSideEffects) {
   EXPECT_TRUE(success);
   EXPECT_TRUE(std::get<bool>(result));
 
-  EXPECT_EQ(callCount, 2);
+  // Short-circuiting should skip explode() in both cases
+  EXPECT_EQ(callCount, 0);
 
+}
+
+TEST(ComprehensiveTest, LogicalShortCircuiting) {
+
+  std::string source =
+      "bool testAnd() { return leftFalse() && right(); }"
+      "bool testOr()  { return leftTrue()  || right(); }";
+
+  int sideEffect = 0;
+  ScriptManager manager;
+
+  manager.registerExternalFunction(
+      "leftFalse", [&sideEffect](const std::vector<Value> & /*args*/) -> Value {
+        sideEffect += 1;
+        return false;
+      });
+
+  manager.registerExternalFunction(
+      "leftTrue", [&sideEffect](const std::vector<Value> & /*args*/) -> Value {
+        sideEffect += 1;
+        return true;
+      });
+
+  manager.registerExternalFunction(
+      "right", [&sideEffect](const std::vector<Value> & /*args*/) -> Value {
+        sideEffect += 10;
+        return true;
+      });
+
+  std::vector<CompilationError> errors;
+  ASSERT_TRUE(manager.loadScriptSource(source, "logic_short.script", errors));
+
+  Value result;
+  std::string errorMsg;
+
+  sideEffect = 0;
+  ASSERT_TRUE(manager.executeProcedure("testAnd", {}, result, errorMsg));
+  EXPECT_FALSE(std::get<bool>(result));
+  EXPECT_EQ(sideEffect, 1); // right() not executed
+
+  sideEffect = 0;
+  ASSERT_TRUE(manager.executeProcedure("testOr", {}, result, errorMsg));
+  EXPECT_TRUE(std::get<bool>(result));
+  EXPECT_EQ(sideEffect, 1); // right() not executed
 }
 
 TEST(ComprehensiveTest, UnaryMinus) {

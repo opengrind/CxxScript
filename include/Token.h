@@ -8,6 +8,7 @@ namespace Script {
 enum class TokenType {
     // Literals
     INT_LITERAL,
+    FLOAT_LITERAL,
     STRING_LITERAL,
     TRUE,
     FALSE,
@@ -24,9 +25,16 @@ enum class TokenType {
     UINT32,
     INT64,
     UINT64,
+    DOUBLE,
     STRING,
     BOOL,
     VOID,
+    SWITCH,
+    CASE,
+    DEFAULT,
+    DO,
+    BREAK,
+    CONTINUE,
     
     // Control Flow
     IF,
@@ -59,14 +67,24 @@ enum class TokenType {
     AND,            // &&
     OR,             // ||
     NOT,            // !
+    BIT_AND,        // &
+    BIT_OR,         // |
+    BIT_XOR,        // ^
+    BIT_NOT,        // ~
+    LSHIFT,         // <<
+    RSHIFT,         // >>
     
     // Delimiters
     LPAREN,         // (
     RPAREN,         // )
     LBRACE,         // {
     RBRACE,         // }
+    LBRACKET,       // [
+    RBRACKET,       // ]
     SEMICOLON,      // ;
     COMMA,          // ,
+    COLON,          // :
+    QUESTION,       // ?
     
     // Special
     END_OF_FILE,
@@ -82,6 +100,7 @@ struct Token {
     // For literals
     int64_t intValue = 0;
     std::string stringValue;
+    double doubleValue = 0.0;
     
     Token(TokenType t = TokenType::UNKNOWN, const std::string& lex = "", int ln = 0, int col = 0)
         : type(t), lexeme(lex), line(ln), column(col) {}

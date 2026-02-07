@@ -37,9 +37,9 @@ public:
 class LiteralExpr : public Expression {
 public:
   Value value;
-  DataType type;
+  TypeInfo type;
 
-  LiteralExpr(const Value &val, DataType t, int ln = 0, int col = 0)
+    LiteralExpr(const Value &val, TypeInfo t, int ln = 0, int col = 0)
       : Expression(ln, col), value(val), type(t) {}
 };
 
@@ -66,7 +66,12 @@ public:
     LESS_EQUAL,
     GREATER_EQUAL,
     LOGICAL_AND,
-    LOGICAL_OR
+    LOGICAL_OR,
+    BIT_AND,
+    BIT_OR,
+    BIT_XOR,
+    LSHIFT,
+    RSHIFT
   };
 
   ExprPtr left;
@@ -79,7 +84,7 @@ public:
 
 class UnaryExpr : public Expression {
 public:
-  enum class Operator { NEGATE, LOGICAL_NOT };
+  enum class Operator { NEGATE, LOGICAL_NOT, BIT_NOT };
 
   ExprPtr operand;
   Operator op;
@@ -96,6 +101,33 @@ public:
   CallExpr(const std::string &name, const std::vector<ExprPtr> &args,
            int ln = 0, int col = 0)
       : Expression(ln, col), functionName(name), arguments(args) {}
+};
+
+class ConditionalExpr : public Expression {
+public:
+  ExprPtr condition;
+  ExprPtr thenExpr;
+  ExprPtr elseExpr;
+
+  ConditionalExpr(ExprPtr cond, ExprPtr t, ExprPtr e, int ln = 0, int col = 0)
+      : Expression(ln, col), condition(cond), thenExpr(t), elseExpr(e) {}
+};
+
+class ArrayLiteralExpr : public Expression {
+public:
+  std::vector<ExprPtr> elements;
+
+  ArrayLiteralExpr(const std::vector<ExprPtr> &elems, int ln = 0, int col = 0)
+      : Expression(ln, col), elements(elems) {}
+};
+
+class IndexExpr : public Expression {
+public:
+  ExprPtr arrayExpr;
+  ExprPtr indexExpr;
+
+  IndexExpr(ExprPtr arr, ExprPtr idx, int ln = 0, int col = 0)
+      : Expression(ln, col), arrayExpr(arr), indexExpr(idx) {}
 };
 
 // Statement Nodes
@@ -115,11 +147,11 @@ public:
 
 class VarDeclStmt : public Statement {
 public:
-  DataType type;
+  TypeInfo type;
   std::string name;
   ExprPtr initializer;
 
-  VarDeclStmt(DataType t, const std::string &n, ExprPtr init, int ln = 0,
+  VarDeclStmt(TypeInfo t, const std::string &n, ExprPtr init, int ln = 0,
               int col = 0)
       : Statement(ln, col), type(t), name(n), initializer(init) {}
 };
@@ -141,6 +173,17 @@ public:
   AssignStmt(const std::string &var, ExprPtr val, Operator o, int ln = 0,
              int col = 0)
       : Statement(ln, col), variableName(var), value(val), op(o) {}
+};
+
+class IndexAssignStmt : public Statement {
+public:
+  ExprPtr arrayExpr;
+  ExprPtr indexExpr;
+  ExprPtr value;
+
+  IndexAssignStmt(ExprPtr arr, ExprPtr idx, ExprPtr val, int ln = 0,
+                  int col = 0)
+      : Statement(ln, col), arrayExpr(arr), indexExpr(idx), value(val) {}
 };
 
 class BlockStmt : public Statement {
@@ -192,20 +235,55 @@ public:
       : Statement(ln, col), value(val) {}
 };
 
+class BreakStmt : public Statement {
+public:
+  BreakStmt(int ln = 0, int col = 0) : Statement(ln, col) {}
+};
+
+class ContinueStmt : public Statement {
+public:
+  ContinueStmt(int ln = 0, int col = 0) : Statement(ln, col) {}
+};
+
+struct SwitchCase {
+  ExprPtr matchExpr; // nullptr for default
+  std::vector<StmtPtr> statements;
+  bool isDefault;
+};
+
+class SwitchStmt : public Statement {
+public:
+  ExprPtr expression;
+  std::vector<SwitchCase> cases;
+
+  SwitchStmt(ExprPtr expr, const std::vector<SwitchCase> &cs, int ln = 0,
+             int col = 0)
+      : Statement(ln, col), expression(expr), cases(cs) {}
+};
+
+class DoWhileStmt : public Statement {
+public:
+  StmtPtr body;
+  ExprPtr condition;
+
+  DoWhileStmt(StmtPtr b, ExprPtr cond, int ln = 0, int col = 0)
+      : Statement(ln, col), body(b), condition(cond) {}
+};
+
 // Procedure Declaration
 struct Parameter {
-  DataType type;
+  TypeInfo type;
   std::string name;
 };
 
 class ProcedureDecl : public ASTNode {
 public:
-  DataType returnType;
+  TypeInfo returnType;
   std::string name;
   std::vector<Parameter> parameters;
   StmtPtr body;
 
-  ProcedureDecl(DataType retType, const std::string &n,
+  ProcedureDecl(TypeInfo retType, const std::string &n,
                 const std::vector<Parameter> &params, StmtPtr b, int ln = 0,
                 int col = 0)
       : ASTNode(ln, col), returnType(retType), name(n), parameters(params),

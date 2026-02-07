@@ -109,6 +109,14 @@ bool ScriptManager::compileScript(const std::string &source,
       return false;
     }
 
+    if (parser.hasErrors()) {
+      for (const auto &pe : parser.getErrors()) {
+        errors.push_back(CompilationError(pe.what(), filename, pe.procedureName,
+                                          pe.line, pe.column));
+      }
+      return false;
+    }
+
     // Check for procedures with duplicate names
     std::unordered_map<std::string, int> procNames;
     for (const auto &proc : script->procedures) {

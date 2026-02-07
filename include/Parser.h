@@ -32,6 +32,7 @@ private:
   std::string _filename;
   size_t _current;
   std::string _currentProcedure;
+  std::vector<ParseError> _errors;
 
   // Utility methods
   bool isAtEnd() const;
@@ -48,21 +49,30 @@ private:
   // Parsing methods
   ProcedureDeclPtr procedureDeclaration();
   std::vector<Parameter> parameters();
-  DataType parseType();
+  TypeInfo parseType();
 
   StmtPtr statement();
   StmtPtr varDeclaration();
   StmtPtr expressionStatement();
   StmtPtr ifStatement();
   StmtPtr whileStatement();
+  StmtPtr doWhileStatement();
   StmtPtr forStatement();
+  StmtPtr switchStatement();
   StmtPtr returnStatement();
+  StmtPtr breakStatement();
+  StmtPtr continueStatement();
   StmtPtr block();
 
   ExprPtr expression();
+  ExprPtr conditional();
   ExprPtr assignment();
   ExprPtr logicalOr();
   ExprPtr logicalAnd();
+  ExprPtr bitwiseOr();
+  ExprPtr bitwiseXor();
+  ExprPtr bitwiseAnd();
+  ExprPtr shift();
   ExprPtr equality();
   ExprPtr comparison();
   ExprPtr term();
@@ -71,6 +81,11 @@ private:
   ExprPtr primary();
   ExprPtr call();
   ExprPtr finishCall(ExprPtr callee);
+  ExprPtr finishIndex(ExprPtr callee);
+
+public:
+  const std::vector<ParseError> &getErrors() const { return _errors; }
+  bool hasErrors() const { return !_errors.empty(); }
 };
 
 } // namespace Script

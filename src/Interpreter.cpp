@@ -145,7 +145,7 @@ Value Interpreter::executeProcedure(const std::string &name,
     execute(proc->body);
 
     // If we reach here, no return statement was executed
-    if (proc->returnType == DataType::VOID) {
+    if (proc->returnType.baseType == DataType::VOID && !proc->returnType.isArray) {
       _currentEnv = previousEnv;
       _currentProcedure = "";
       return static_cast<int32_t>(0); // Dummy value
@@ -161,7 +161,7 @@ Value Interpreter::executeProcedure(const std::string &name,
     _currentEnv = previousEnv;
     _currentProcedure = "";
 
-    if (proc->returnType == DataType::VOID) {
+    if (proc->returnType.baseType == DataType::VOID && !proc->returnType.isArray) {
       return static_cast<int32_t>(0); // Dummy value
     }
 
@@ -188,6 +188,12 @@ Value Interpreter::evaluate(ExprPtr expr) {
   if (auto *var = dynamic_cast<VariableExpr *>(expr.get())) {
     return evaluateVariable(var);
   }
+  if (auto *arr = dynamic_cast<ArrayLiteralExpr *>(expr.get())) {
+    return evaluateArrayLiteral(arr);
+  }
+  if (auto *idx = dynamic_cast<IndexExpr *>(expr.get())) {
+    return evaluateIndex(idx);
+  }
   if (auto *bin = dynamic_cast<BinaryExpr *>(expr.get())) {
     return evaluateBinary(bin);
   }
@@ -196,6 +202,9 @@ Value Interpreter::evaluate(ExprPtr expr) {
   }
   if (auto *call = dynamic_cast<CallExpr *>(expr.get())) {
     return evaluateCall(call);
+  }
+  if (auto *cond = dynamic_cast<ConditionalExpr *>(expr.get())) {
+    return evaluateConditional(cond);
   }
 
   throw runtimeError("Unknown expression type", expr->line, expr->column);
@@ -216,8 +225,18 @@ void Interpreter::execute(StmtPtr stmt) {
     executeWhile(whileStmt);
   } else if (auto *forStmt = dynamic_cast<ForStmt *>(stmt.get())) {
     executeFor(forStmt);
+  } else if (auto *doWhile = dynamic_cast<DoWhileStmt *>(stmt.get())) {
+    executeDoWhile(doWhile);
+  } else if (auto *switchStmt = dynamic_cast<SwitchStmt *>(stmt.get())) {
+    executeSwitch(switchStmt);
   } else if (auto *retStmt = dynamic_cast<ReturnStmt *>(stmt.get())) {
     executeReturn(retStmt);
+  } else if (auto *brk = dynamic_cast<BreakStmt *>(stmt.get())) {
+    executeBreak(brk);
+  } else if (auto *cont = dynamic_cast<ContinueStmt *>(stmt.get())) {
+    executeContinue(cont);
+  } else if (auto *idxAssign = dynamic_cast<IndexAssignStmt *>(stmt.get())) {
+    executeIndexAssign(idxAssign);
   } else {
     throw runtimeError("Unknown statement type", stmt->line, stmt->column);
   }
@@ -233,8 +252,55 @@ Value Interpreter::evaluateVariable(VariableExpr *expr) {
   }
 }
 
+Value Interpreter::evaluateArrayLiteral(ArrayLiteralExpr *expr) {
+  std::vector<Value> elements;
+  elements.reserve(expr->elements.size());
+  for (auto &e : expr->elements) {
+    elements.push_back(evaluate(e));
+  }
+
+  TypeInfo elemType = elements.empty() ? TypeInfo(DataType::VOID)
+                                       : ValueHelper::getType(elements[0]);
+  return ValueHelper::createArray(elemType, elements);
+}
+
+Value Interpreter::evaluateIndex(IndexExpr *expr) {
+  Value arrayVal = evaluate(expr->arrayExpr);
+  if (!ValueHelper::isArray(arrayVal)) {
+    throw runtimeError("Indexing non-array value", expr->line, expr->column);
+  }
+
+  Value indexVal = evaluate(expr->indexExpr);
+  uint64_t idx = ValueHelper::toUInt64(indexVal);
+
+  const auto &elems = ValueHelper::arrayElements(arrayVal);
+  if (idx >= elems.size()) {
+    throw runtimeError("Array index out of bounds", expr->line, expr->column);
+  }
+
+  return elems[idx];
+}
+
 Value Interpreter::evaluateBinary(BinaryExpr *expr) {
   Value left = evaluate(expr->left);
+  // Short-circuit for logical operators at interpreter level to avoid
+  // evaluating right operand when not needed
+  if (expr->op == BinaryExpr::Operator::LOGICAL_AND) {
+    if (!ValueHelper::toBool(left)) {
+      return false;
+    }
+    Value right = evaluate(expr->right);
+    return ValueHelper::logicalAnd(left, right);
+  }
+
+  if (expr->op == BinaryExpr::Operator::LOGICAL_OR) {
+    if (ValueHelper::toBool(left)) {
+      return true;
+    }
+    Value right = evaluate(expr->right);
+    return ValueHelper::logicalOr(left, right);
+  }
+
   Value right = evaluate(expr->right);
 
   switch (expr->op) {
@@ -264,6 +330,16 @@ Value Interpreter::evaluateBinary(BinaryExpr *expr) {
     return ValueHelper::logicalAnd(left, right);
   case BinaryExpr::Operator::LOGICAL_OR:
     return ValueHelper::logicalOr(left, right);
+  case BinaryExpr::Operator::BIT_AND:
+    return ValueHelper::bitAnd(left, right);
+  case BinaryExpr::Operator::BIT_OR:
+    return ValueHelper::bitOr(left, right);
+  case BinaryExpr::Operator::BIT_XOR:
+    return ValueHelper::bitXor(left, right);
+  case BinaryExpr::Operator::LSHIFT:
+    return ValueHelper::lshift(left, right);
+  case BinaryExpr::Operator::RSHIFT:
+    return ValueHelper::rshift(left, right);
   }
 
   throw runtimeError("Unknown binary operator", expr->line, expr->column);
@@ -274,16 +350,76 @@ Value Interpreter::evaluateUnary(UnaryExpr *expr) {
 
   switch (expr->op) {
   case UnaryExpr::Operator::NEGATE:
+    if (ValueHelper::getType(operand).baseType == DataType::DOUBLE) {
+      return ValueHelper::createValue(DataType::DOUBLE,
+                                      -ValueHelper::toDouble(operand));
+    }
     return ValueHelper::createValue(DataType::INT32,
                                     -ValueHelper::toInt64(operand));
   case UnaryExpr::Operator::LOGICAL_NOT:
     return ValueHelper::logicalNot(operand);
+  case UnaryExpr::Operator::BIT_NOT:
+    return ValueHelper::bitNot(operand);
   }
 
   throw runtimeError("Unknown unary operator", expr->line, expr->column);
 }
 
+Value Interpreter::evaluateConditional(ConditionalExpr *expr) {
+  Value cond = evaluate(expr->condition);
+  if (ValueHelper::toBool(cond)) {
+    return evaluate(expr->thenExpr);
+  }
+  return evaluate(expr->elseExpr);
+}
+
 Value Interpreter::evaluateCall(CallExpr *expr) {
+  // Built-in functions for arrays
+  if (expr->functionName == "len") {
+    if (expr->arguments.size() != 1) {
+      throw runtimeError("len expects 1 argument", expr->line, expr->column);
+    }
+    Value arrayVal = evaluate(expr->arguments[0]);
+    if (!ValueHelper::isArray(arrayVal)) {
+      throw runtimeError("len expects an array", expr->line, expr->column);
+    }
+    auto size = static_cast<int64_t>(ValueHelper::arrayElements(arrayVal).size());
+    return ValueHelper::createValue(DataType::INT32, size);
+  }
+
+  if (expr->functionName == "push") {
+    if (expr->arguments.size() != 2) {
+      throw runtimeError("push expects 2 arguments", expr->line, expr->column);
+    }
+    Value arrayVal = evaluate(expr->arguments[0]);
+    if (!ValueHelper::isArray(arrayVal)) {
+      throw runtimeError("push expects an array as first argument", expr->line, expr->column);
+    }
+    TypeInfo elementType = ValueHelper::arrayElementType(arrayVal);
+    Value raw = evaluate(expr->arguments[1]);
+    Value converted = convertToType(raw, TypeInfo(elementType.baseType));
+    ValueHelper::arrayElements(arrayVal).push_back(converted);
+    auto size = static_cast<int64_t>(ValueHelper::arrayElements(arrayVal).size());
+    return ValueHelper::createValue(DataType::INT32, size);
+  }
+
+  if (expr->functionName == "pop") {
+    if (expr->arguments.size() != 1) {
+      throw runtimeError("pop expects 1 argument", expr->line, expr->column);
+    }
+    Value arrayVal = evaluate(expr->arguments[0]);
+    if (!ValueHelper::isArray(arrayVal)) {
+      throw runtimeError("pop expects an array", expr->line, expr->column);
+    }
+    auto &elems = ValueHelper::arrayElements(arrayVal);
+    if (elems.empty()) {
+      throw runtimeError("Cannot pop from empty array", expr->line, expr->column);
+    }
+    Value result = elems.back();
+    elems.pop_back();
+    return result;
+  }
+
   // Check if it's a procedure call
   if (hasProcedure(expr->functionName)) {
     std::vector<Value> args;
@@ -319,39 +455,47 @@ void Interpreter::executeVarDecl(VarDeclStmt *stmt) {
     value = convertToType(value, stmt->type);
   } else {
     // Default initialization
-    switch (stmt->type) {
-    case DataType::INT8:
-      value = static_cast<int8_t>(0);
-      break;
-    case DataType::UINT8:
-      value = static_cast<uint8_t>(0);
-      break;
-    case DataType::INT16:
-      value = static_cast<int16_t>(0);
-      break;
-    case DataType::UINT16:
-      value = static_cast<uint16_t>(0);
-      break;
-    case DataType::INT32:
-      value = static_cast<int32_t>(0);
-      break;
-    case DataType::UINT32:
-      value = static_cast<uint32_t>(0);
-      break;
-    case DataType::INT64:
-      value = static_cast<int64_t>(0);
-      break;
-    case DataType::UINT64:
-      value = static_cast<uint64_t>(0);
-      break;
-    case DataType::STRING:
-      value = std::string("");
-      break;
-    case DataType::BOOL:
-      value = false;
-      break;
-    default:
-      value = static_cast<int32_t>(0);
+    if (stmt->type.isArray) {
+      value = ValueHelper::createArray(TypeInfo(stmt->type.baseType), {});
+    } else {
+      switch (stmt->type.baseType) {
+      case DataType::INT8:
+        value = static_cast<int8_t>(0);
+        break;
+      case DataType::UINT8:
+        value = static_cast<uint8_t>(0);
+        break;
+      case DataType::INT16:
+        value = static_cast<int16_t>(0);
+        break;
+      case DataType::UINT16:
+        value = static_cast<uint16_t>(0);
+        break;
+      case DataType::INT32:
+        value = static_cast<int32_t>(0);
+        break;
+      case DataType::UINT32:
+        value = static_cast<uint32_t>(0);
+        break;
+      case DataType::INT64:
+        value = static_cast<int64_t>(0);
+        break;
+      case DataType::DOUBLE:
+        value = static_cast<double>(0.0);
+        break;
+      case DataType::UINT64:
+        value = static_cast<uint64_t>(0);
+        break;
+      case DataType::STRING:
+        value = std::string("");
+        break;
+      case DataType::BOOL:
+        value = false;
+        break;
+      case DataType::VOID:
+        value = static_cast<int32_t>(0);
+        break;
+      }
     }
   }
 
@@ -390,6 +534,27 @@ void Interpreter::executeAssign(AssignStmt *stmt) {
   }
 }
 
+void Interpreter::executeIndexAssign(IndexAssignStmt *stmt) {
+  Value arrayVal = evaluate(stmt->arrayExpr);
+  if (!ValueHelper::isArray(arrayVal)) {
+    throw runtimeError("Index assignment on non-array value", stmt->line, stmt->column);
+  }
+
+  Value indexVal = evaluate(stmt->indexExpr);
+  uint64_t idx = ValueHelper::toUInt64(indexVal);
+
+  std::vector<Value> &elems = ValueHelper::arrayElements(arrayVal);
+  if (idx >= elems.size()) {
+    throw runtimeError("Array index out of bounds", stmt->line, stmt->column);
+  }
+
+  TypeInfo elementType = ValueHelper::arrayElementType(arrayVal);
+  Value rawValue = evaluate(stmt->value);
+  Value converted = convertToType(rawValue, TypeInfo(elementType.baseType));
+
+  elems[idx] = converted;
+}
+
 void Interpreter::executeBlock(BlockStmt *stmt) {
   _currentEnv->enterScope();
 
@@ -416,7 +581,13 @@ void Interpreter::executeIf(IfStmt *stmt) {
 
 void Interpreter::executeWhile(WhileStmt *stmt) {
   while (ValueHelper::toBool(evaluate(stmt->condition))) {
-    execute(stmt->body);
+    try {
+      execute(stmt->body);
+    } catch (const ContinueException &) {
+      continue;
+    } catch (const BreakException &) {
+      break;
+    }
   }
 }
 
@@ -437,7 +608,13 @@ void Interpreter::executeFor(ForStmt *stmt) {
       }
 
       // Execute body
-      execute(stmt->body);
+      try {
+        execute(stmt->body);
+      } catch (const ContinueException &) {
+        // Skip to increment
+      } catch (const BreakException &) {
+        break;
+      }
 
       // Increment
       if (stmt->increment) {
@@ -464,43 +641,109 @@ void Interpreter::executeReturn(ReturnStmt *stmt) {
   throw ReturnException(value);
 }
 
+void Interpreter::executeDoWhile(DoWhileStmt *stmt) {
+  while (true) {
+    try {
+      execute(stmt->body);
+    } catch (const ContinueException &) {
+      // skip to condition check
+    } catch (const BreakException &) {
+      break;
+    }
+
+    if (!ValueHelper::toBool(evaluate(stmt->condition))) {
+      break;
+    }
+  }
+}
+
+void Interpreter::executeSwitch(SwitchStmt *stmt) {
+  Value control = evaluate(stmt->expression);
+  bool matched = false;
+
+  for (size_t i = 0; i < stmt->cases.size(); ++i) {
+    const auto &caseEntry = stmt->cases[i];
+
+    if (!matched) {
+      if (caseEntry.isDefault) {
+        matched = true;
+      } else {
+        Value caseVal = evaluate(caseEntry.matchExpr);
+        if (ValueHelper::equals(control, caseVal)) {
+          matched = true;
+        }
+      }
+    }
+
+    if (matched) {
+      try {
+        for (auto &s : caseEntry.statements) {
+          execute(s);
+        }
+      } catch (const BreakException &) {
+        return;
+      }
+    }
+  }
+}
+
+void Interpreter::executeBreak(BreakStmt * /*stmt*/) { throw BreakException(); }
+
+void Interpreter::executeContinue(ContinueStmt * /*stmt*/) {
+  throw ContinueException();
+}
+
 RuntimeError Interpreter::runtimeError(const std::string &message, int line,
                                        int column) {
   return RuntimeError(message, line, column, _currentProcedure);
 }
 
-Value Interpreter::convertToType(const Value &val, DataType targetType) {
-  DataType sourceType = ValueHelper::getType(val);
+Value Interpreter::convertToType(const Value &val, const TypeInfo &targetType) {
+  TypeInfo sourceType = ValueHelper::getType(val);
 
-  if (sourceType == targetType) {
+  if (targetType.isArray) {
+    if (!ValueHelper::isArray(val)) {
+      throw std::runtime_error("Expected array value");
+    }
+    const auto &elems = ValueHelper::arrayElements(val);
+    std::vector<Value> converted;
+    converted.reserve(elems.size());
+    for (const auto &e : elems) {
+      converted.push_back(convertToType(e, TypeInfo(targetType.baseType)));
+    }
+    return ValueHelper::createArray(TypeInfo(targetType.baseType), converted);
+  }
+
+  if (sourceType.isArray) {
+    throw std::runtime_error("Cannot convert array to scalar type");
+  }
+
+  if (sourceType.baseType == targetType.baseType) {
     return val;
   }
 
-  // Handle conversions
-  switch (targetType) {
+  switch (targetType.baseType) {
   case DataType::INT8:
-    return ValueHelper::createValue(targetType, ValueHelper::toInt64(val));
   case DataType::INT16:
-    return ValueHelper::createValue(targetType, ValueHelper::toInt64(val));
   case DataType::INT32:
-    return ValueHelper::createValue(targetType, ValueHelper::toInt64(val));
   case DataType::INT64:
-    return ValueHelper::createValue(targetType, ValueHelper::toInt64(val));
+    return ValueHelper::createValue(targetType.baseType, ValueHelper::toInt64(val));
   case DataType::UINT8:
-    return ValueHelper::createValue(targetType, ValueHelper::toUInt64(val));
   case DataType::UINT16:
-    return ValueHelper::createValue(targetType, ValueHelper::toUInt64(val));
   case DataType::UINT32:
-    return ValueHelper::createValue(targetType, ValueHelper::toUInt64(val));
   case DataType::UINT64:
-    return ValueHelper::createValue(targetType, ValueHelper::toUInt64(val));
-  case DataType::BOOL:
-    return ValueHelper::createValue(targetType, ValueHelper::toBool(val));
+    return ValueHelper::createValue(targetType.baseType, ValueHelper::toUInt64(val));
+  case DataType::DOUBLE:
+    return ValueHelper::createValue(targetType.baseType, ValueHelper::toDouble(val));
   case DataType::STRING:
-    return ValueHelper::createValue(targetType, ValueHelper::toString(val));
-  default:
+    return ValueHelper::createValue(targetType.baseType, ValueHelper::toString(val));
+  case DataType::BOOL:
+    return ValueHelper::createValue(targetType.baseType, ValueHelper::toBool(val));
+  case DataType::VOID:
     return val;
   }
+
+  throw std::runtime_error("Unsupported conversion");
 }
 
 } // namespace Script

@@ -28,6 +28,9 @@ public:
   ReturnException(const Value &val) : value(val) {}
 };
 
+class BreakException : public std::exception {};
+class ContinueException : public std::exception {};
+
 // External function callback
 using ExternalFunctionCallback =
     std::function<Value(const std::vector<Value> &)>;
@@ -90,9 +93,12 @@ private:
 
   Value evaluateLiteral(LiteralExpr *expr);
   Value evaluateVariable(VariableExpr *expr);
+  Value evaluateArrayLiteral(ArrayLiteralExpr *expr);
+  Value evaluateIndex(IndexExpr *expr);
   Value evaluateBinary(BinaryExpr *expr);
   Value evaluateUnary(UnaryExpr *expr);
   Value evaluateCall(CallExpr *expr);
+  Value evaluateConditional(ConditionalExpr *expr);
 
   void executeExpression(ExpressionStmt *stmt);
   void executeVarDecl(VarDeclStmt *stmt);
@@ -101,12 +107,17 @@ private:
   void executeIf(IfStmt *stmt);
   void executeWhile(WhileStmt *stmt);
   void executeFor(ForStmt *stmt);
+  void executeDoWhile(DoWhileStmt *stmt);
+  void executeSwitch(SwitchStmt *stmt);
   void executeReturn(ReturnStmt *stmt);
+  void executeBreak(BreakStmt *stmt);
+  void executeContinue(ContinueStmt *stmt);
+  void executeIndexAssign(IndexAssignStmt *stmt);
 
   RuntimeError runtimeError(const std::string &message, int line, int column);
 
   // Type conversion for parameters
-  Value convertToType(const Value &val, DataType targetType);
+  Value convertToType(const Value &val, const TypeInfo &targetType);
 };
 
 } // namespace Script

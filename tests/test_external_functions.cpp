@@ -8,7 +8,7 @@ TEST(ExternalFunctionsTest, MultipleExternalFunctions) {
             << std::endl;
 
   std::string source = "int32 calculate(int32 x) {"
-                       "  int32 doubled = double(x);"
+                       "  int32 doubled = twice(x);"
                        "  int32 tripled = triple(x);"
                        "  int32 result = add(doubled, tripled);"
                        "  return result;"
@@ -17,7 +17,7 @@ TEST(ExternalFunctionsTest, MultipleExternalFunctions) {
   ScriptManager manager;
 
   // Register multiple external functions
-  manager.registerExternalFunction("double",
+  manager.registerExternalFunction("twice",
                                    [](const std::vector<Value> &args) -> Value {
                                      return std::get<int32_t>(args[0]) * 2;
                                    });

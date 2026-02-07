@@ -58,7 +58,7 @@ public:
   // Get procedure signature information
   struct ProcedureInfo {
     std::string name;
-    DataType returnType;
+    TypeInfo returnType;
     std::vector<Parameter> parameters;
     std::string filename;
   };

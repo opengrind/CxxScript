@@ -18,6 +18,7 @@ ScriptPtr Parser::parse() {
       }
     } catch (const ParseError &e) {
       // Error already recorded, synchronize and continue
+      _errors.push_back(e);
       synchronize();
     }
   }
@@ -82,6 +83,8 @@ void Parser::synchronize() {
     case TokenType::IF:
     case TokenType::WHILE:
     case TokenType::FOR:
+    case TokenType::SWITCH:
+    case TokenType::DO:
     case TokenType::RETURN:
     case TokenType::INT8:
     case TokenType::UINT8:
@@ -91,6 +94,7 @@ void Parser::synchronize() {
     case TokenType::UINT32:
     case TokenType::INT64:
     case TokenType::UINT64:
+    case TokenType::DOUBLE:
     case TokenType::STRING:
     case TokenType::BOOL:
     case TokenType::VOID:
@@ -107,7 +111,7 @@ ProcedureDeclPtr Parser::procedureDeclaration() {
   int line = peek().line;
   int column = peek().column;
 
-  DataType returnType = parseType();
+  TypeInfo returnType = parseType();
 
   Token name = consume(TokenType::IDENTIFIER, "Expected procedure name");
   _currentProcedure = name.lexeme;
@@ -130,7 +134,7 @@ std::vector<Parameter> Parser::parameters() {
 
   if (!check(TokenType::RPAREN)) {
     do {
-      DataType type = parseType();
+      TypeInfo type = parseType();
       Token name = consume(TokenType::IDENTIFIER, "Expected parameter name");
       params.push_back({type, name.lexeme});
     } while (match({TokenType::COMMA}));
@@ -139,29 +143,42 @@ std::vector<Parameter> Parser::parameters() {
   return params;
 }
 
-DataType Parser::parseType() {
+TypeInfo Parser::parseType() {
+  DataType base = DataType::VOID;
   if (match({TokenType::INT8}))
-    return DataType::INT8;
-  if (match({TokenType::UINT8}))
-    return DataType::UINT8;
-  if (match({TokenType::INT16}))
-    return DataType::INT16;
-  if (match({TokenType::UINT16}))
-    return DataType::UINT16;
-  if (match({TokenType::INT32}))
-    return DataType::INT32;
-  if (match({TokenType::UINT32}))
-    return DataType::UINT32;
-  if (match({TokenType::INT64}))
-    return DataType::INT64;
-  if (match({TokenType::UINT64}))
-    return DataType::UINT64;
-  if (match({TokenType::STRING}))
-    return DataType::STRING;
-  if (match({TokenType::BOOL}))
-    return DataType::BOOL;
-  if (match({TokenType::VOID}))
-    return DataType::VOID;
+    base = DataType::INT8;
+  else if (match({TokenType::UINT8}))
+    base = DataType::UINT8;
+  else if (match({TokenType::INT16}))
+    base = DataType::INT16;
+  else if (match({TokenType::UINT16}))
+    base = DataType::UINT16;
+  else if (match({TokenType::INT32}))
+    base = DataType::INT32;
+  else if (match({TokenType::UINT32}))
+    base = DataType::UINT32;
+  else if (match({TokenType::INT64}))
+    base = DataType::INT64;
+  else if (match({TokenType::UINT64}))
+    base = DataType::UINT64;
+  else if (match({TokenType::DOUBLE}))
+    base = DataType::DOUBLE;
+  else if (match({TokenType::STRING}))
+    base = DataType::STRING;
+  else if (match({TokenType::BOOL}))
+    base = DataType::BOOL;
+  else if (match({TokenType::VOID}))
+    base = DataType::VOID;
+  else
+    throw error("Expected type");
+
+  bool isArray = false;
+  if (match({TokenType::LBRACKET})) {
+    consume(TokenType::RBRACKET, "Expected ']' after '[' in type");
+    isArray = true;
+  }
+
+  return TypeInfo(base, isArray);
 
   throw error("Expected type name");
 }
@@ -171,10 +188,18 @@ StmtPtr Parser::statement() {
     return ifStatement();
   if (match({TokenType::WHILE}))
     return whileStatement();
+  if (match({TokenType::DO}))
+    return doWhileStatement();
   if (match({TokenType::FOR}))
     return forStatement();
+  if (match({TokenType::SWITCH}))
+    return switchStatement();
   if (match({TokenType::RETURN}))
     return returnStatement();
+  if (match({TokenType::BREAK}))
+    return breakStatement();
+  if (match({TokenType::CONTINUE}))
+    return continueStatement();
   if (match({TokenType::LBRACE}))
     return block();
 
@@ -183,6 +208,7 @@ StmtPtr Parser::statement() {
       check(TokenType::INT16) || check(TokenType::UINT16) ||
       check(TokenType::INT32) || check(TokenType::UINT32) ||
       check(TokenType::INT64) || check(TokenType::UINT64) ||
+      check(TokenType::DOUBLE) ||
       check(TokenType::STRING) || check(TokenType::BOOL)) {
     return varDeclaration();
   }
@@ -194,7 +220,7 @@ StmtPtr Parser::varDeclaration() {
   int line = peek().line;
   int column = peek().column;
 
-  DataType type = parseType();
+  TypeInfo type = parseType();
   Token name = consume(TokenType::IDENTIFIER, "Expected variable name");
 
   ExprPtr initializer = nullptr;
@@ -216,13 +242,19 @@ StmtPtr Parser::expressionStatement() {
   // Check for assignment operators
   if (match({TokenType::ASSIGN})) {
     auto varExpr = std::dynamic_pointer_cast<VariableExpr>(expr);
-    if (!varExpr) {
+    auto indexExpr = std::dynamic_pointer_cast<IndexExpr>(expr);
+    if (!varExpr && !indexExpr) {
       throw error("Invalid assignment target");
     }
     ExprPtr value = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after expression");
-    return std::make_shared<AssignStmt>(
-        varExpr->name, value, AssignStmt::Operator::ASSIGN, line, column);
+    if (varExpr) {
+      return std::make_shared<AssignStmt>(
+          varExpr->name, value, AssignStmt::Operator::ASSIGN, line, column);
+    }
+    return std::make_shared<IndexAssignStmt>(indexExpr->arrayExpr,
+                                             indexExpr->indexExpr, value,
+                                             line, column);
   }
 
   if (match({TokenType::PLUS_ASSIGN})) {
@@ -305,6 +337,21 @@ StmtPtr Parser::whileStatement() {
   return std::make_shared<WhileStmt>(condition, body, line, column);
 }
 
+StmtPtr Parser::doWhileStatement() {
+  int line = previous().line;
+  int column = previous().column;
+
+  StmtPtr body = statement();
+
+  consume(TokenType::WHILE, "Expected 'while' after do-while body");
+  consume(TokenType::LPAREN, "Expected '(' after 'while'");
+  ExprPtr condition = expression();
+  consume(TokenType::RPAREN, "Expected ')' after while condition");
+  consume(TokenType::SEMICOLON, "Expected ';' after do-while statement");
+
+  return std::make_shared<DoWhileStmt>(body, condition, line, column);
+}
+
 StmtPtr Parser::forStatement() {
   int line = previous().line;
   int column = previous().column;
@@ -319,6 +366,7 @@ StmtPtr Parser::forStatement() {
              check(TokenType::INT16) || check(TokenType::UINT16) ||
              check(TokenType::INT32) || check(TokenType::UINT32) ||
              check(TokenType::INT64) || check(TokenType::UINT64) ||
+             check(TokenType::DOUBLE) ||
              check(TokenType::STRING) || check(TokenType::BOOL)) {
     initializer = varDeclaration();
   } else {
@@ -383,6 +431,53 @@ StmtPtr Parser::forStatement() {
                                    line, column);
 }
 
+StmtPtr Parser::switchStatement() {
+  int line = previous().line;
+  int column = previous().column;
+
+  consume(TokenType::LPAREN, "Expected '(' after 'switch'");
+  ExprPtr expr = expression();
+  consume(TokenType::RPAREN, "Expected ')' after switch expression");
+  consume(TokenType::LBRACE, "Expected '{' after switch expression");
+
+  std::vector<SwitchCase> cases;
+  bool seenDefault = false;
+
+  while (!check(TokenType::RBRACE) && !isAtEnd()) {
+    if (match({TokenType::CASE})) {
+      ExprPtr matchExpr = expression();
+      consume(TokenType::COLON, "Expected ':' after case expression");
+
+      std::vector<StmtPtr> stmts;
+      while (!check(TokenType::CASE) && !check(TokenType::DEFAULT) &&
+             !check(TokenType::RBRACE)) {
+        stmts.push_back(statement());
+      }
+
+      cases.push_back({matchExpr, stmts, false});
+    } else if (match({TokenType::DEFAULT})) {
+      consume(TokenType::COLON, "Expected ':' after default");
+      if (seenDefault) {
+        throw error("Multiple default labels in switch");
+      }
+      seenDefault = true;
+
+      std::vector<StmtPtr> stmts;
+      while (!check(TokenType::CASE) && !check(TokenType::DEFAULT) &&
+             !check(TokenType::RBRACE)) {
+        stmts.push_back(statement());
+      }
+
+      cases.push_back({nullptr, stmts, true});
+    } else {
+      throw error("Expected 'case' or 'default' in switch statement");
+    }
+  }
+
+  consume(TokenType::RBRACE, "Expected '}' after switch cases");
+  return std::make_shared<SwitchStmt>(expr, cases, line, column);
+}
+
 StmtPtr Parser::returnStatement() {
   int line = previous().line;
   int column = previous().column;
@@ -394,6 +489,20 @@ StmtPtr Parser::returnStatement() {
 
   consume(TokenType::SEMICOLON, "Expected ';' after return value");
   return std::make_shared<ReturnStmt>(value, line, column);
+}
+
+StmtPtr Parser::breakStatement() {
+  int line = previous().line;
+  int column = previous().column;
+  consume(TokenType::SEMICOLON, "Expected ';' after 'break'");
+  return std::make_shared<BreakStmt>(line, column);
+}
+
+StmtPtr Parser::continueStatement() {
+  int line = previous().line;
+  int column = previous().column;
+  consume(TokenType::SEMICOLON, "Expected ';' after 'continue'");
+  return std::make_shared<ContinueStmt>(line, column);
 }
 
 StmtPtr Parser::block() {
@@ -410,7 +519,23 @@ StmtPtr Parser::block() {
   return std::make_shared<BlockStmt>(statements, line, column);
 }
 
-ExprPtr Parser::expression() { return logicalOr(); }
+ExprPtr Parser::expression() { return conditional(); }
+
+ExprPtr Parser::conditional() {
+  ExprPtr expr = logicalOr();
+
+  if (match({TokenType::QUESTION})) {
+    int line = previous().line;
+    int column = previous().column;
+    ExprPtr thenExpr = expression();
+    consume(TokenType::COLON, "Expected ':' in conditional expression");
+    ExprPtr elseExpr = conditional();
+    return std::make_shared<ConditionalExpr>(expr, thenExpr, elseExpr, line,
+                                             column);
+  }
+
+  return expr;
+}
 
 ExprPtr Parser::logicalOr() {
   ExprPtr expr = logicalAnd();
@@ -427,14 +552,78 @@ ExprPtr Parser::logicalOr() {
 }
 
 ExprPtr Parser::logicalAnd() {
-  ExprPtr expr = equality();
+  ExprPtr expr = bitwiseOr();
 
   while (match({TokenType::AND})) {
     int line = previous().line;
     int column = previous().column;
-    ExprPtr right = equality();
+    ExprPtr right = bitwiseOr();
     expr = std::make_shared<BinaryExpr>(
         expr, right, BinaryExpr::Operator::LOGICAL_AND, line, column);
+  }
+
+  return expr;
+}
+
+ExprPtr Parser::bitwiseOr() {
+  ExprPtr expr = bitwiseXor();
+
+  while (match({TokenType::BIT_OR})) {
+    Token op = previous();
+    int line = op.line;
+    int column = op.column;
+    ExprPtr right = bitwiseXor();
+    expr = std::make_shared<BinaryExpr>(expr, right, BinaryExpr::Operator::BIT_OR,
+                                        line, column);
+  }
+
+  return expr;
+}
+
+ExprPtr Parser::bitwiseXor() {
+  ExprPtr expr = bitwiseAnd();
+
+  while (match({TokenType::BIT_XOR})) {
+    Token op = previous();
+    int line = op.line;
+    int column = op.column;
+    ExprPtr right = bitwiseAnd();
+    expr = std::make_shared<BinaryExpr>(expr, right, BinaryExpr::Operator::BIT_XOR,
+                                        line, column);
+  }
+
+  return expr;
+}
+
+ExprPtr Parser::bitwiseAnd() {
+  ExprPtr expr = shift();
+
+  while (match({TokenType::BIT_AND})) {
+    Token op = previous();
+    int line = op.line;
+    int column = op.column;
+    ExprPtr right = shift();
+    expr = std::make_shared<BinaryExpr>(expr, right, BinaryExpr::Operator::BIT_AND,
+                                        line, column);
+  }
+
+  return expr;
+}
+
+ExprPtr Parser::shift() {
+  ExprPtr expr = equality();
+
+  while (match({TokenType::LSHIFT, TokenType::RSHIFT})) {
+    Token op = previous();
+    int line = op.line;
+    int column = op.column;
+    ExprPtr right = equality();
+
+    BinaryExpr::Operator binOp =
+        (op.type == TokenType::LSHIFT) ? BinaryExpr::Operator::LSHIFT
+                                       : BinaryExpr::Operator::RSHIFT;
+
+    expr = std::make_shared<BinaryExpr>(expr, right, binOp, line, column);
   }
 
   return expr;
@@ -543,15 +732,24 @@ ExprPtr Parser::factor() {
 }
 
 ExprPtr Parser::unary() {
-  if (match({TokenType::MINUS, TokenType::NOT})) {
+  if (match({TokenType::MINUS, TokenType::NOT, TokenType::BIT_NOT})) {
     Token op = previous();
     int line = op.line;
     int column = op.column;
     ExprPtr right = unary();
 
-    UnaryExpr::Operator unOp = (op.type == TokenType::MINUS)
-                                   ? UnaryExpr::Operator::NEGATE
-                                   : UnaryExpr::Operator::LOGICAL_NOT;
+    UnaryExpr::Operator unOp;
+    switch (op.type) {
+    case TokenType::MINUS:
+      unOp = UnaryExpr::Operator::NEGATE;
+      break;
+    case TokenType::BIT_NOT:
+      unOp = UnaryExpr::Operator::BIT_NOT;
+      break;
+    default:
+      unOp = UnaryExpr::Operator::LOGICAL_NOT;
+      break;
+    }
 
     return std::make_shared<UnaryExpr>(right, unOp, line, column);
   }
@@ -565,6 +763,8 @@ ExprPtr Parser::call() {
   while (true) {
     if (match({TokenType::LPAREN})) {
       expr = finishCall(expr);
+    } else if (match({TokenType::LBRACKET})) {
+      expr = finishIndex(expr);
     } else {
       break;
     }
@@ -594,27 +794,54 @@ ExprPtr Parser::finishCall(ExprPtr callee) {
   return std::make_shared<CallExpr>(varExpr->name, arguments, line, column);
 }
 
+ExprPtr Parser::finishIndex(ExprPtr callee) {
+  int line = previous().line;
+  int column = previous().column;
+  ExprPtr index = expression();
+  consume(TokenType::RBRACKET, "Expected ']' after index expression");
+  return std::make_shared<IndexExpr>(callee, index, line, column);
+}
+
 ExprPtr Parser::primary() {
   if (match({TokenType::TRUE})) {
-    return std::make_shared<LiteralExpr>(true, DataType::BOOL, previous().line,
+    return std::make_shared<LiteralExpr>(true, TypeInfo(DataType::BOOL), previous().line,
                                          previous().column);
   }
 
   if (match({TokenType::FALSE})) {
-    return std::make_shared<LiteralExpr>(false, DataType::BOOL, previous().line,
+    return std::make_shared<LiteralExpr>(false, TypeInfo(DataType::BOOL), previous().line,
                                          previous().column);
+  }
+
+  if (match({TokenType::LBRACKET})) {
+    int line = previous().line;
+    int column = previous().column;
+    std::vector<ExprPtr> elements;
+    if (!check(TokenType::RBRACKET)) {
+      do {
+        elements.push_back(expression());
+      } while (match({TokenType::COMMA}));
+    }
+    consume(TokenType::RBRACKET, "Expected ']' after array literal");
+    return std::make_shared<ArrayLiteralExpr>(elements, line, column);
   }
 
   if (match({TokenType::INT_LITERAL})) {
     Token token = previous();
     return std::make_shared<LiteralExpr>(static_cast<int32_t>(token.intValue),
-                                         DataType::INT32, token.line,
+                                         TypeInfo(DataType::INT32), token.line,
                                          token.column);
+  }
+
+  if (match({TokenType::FLOAT_LITERAL})) {
+    Token token = previous();
+    return std::make_shared<LiteralExpr>(token.doubleValue, TypeInfo(DataType::DOUBLE),
+                                         token.line, token.column);
   }
 
   if (match({TokenType::STRING_LITERAL})) {
     Token token = previous();
-    return std::make_shared<LiteralExpr>(token.stringValue, DataType::STRING,
+    return std::make_shared<LiteralExpr>(token.stringValue, TypeInfo(DataType::STRING),
                                          token.line, token.column);
   }
 

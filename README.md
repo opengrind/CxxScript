@@ -18,10 +18,13 @@ cd build && ctest
 
 ## Features
 
-- **Multiple Data Types**: int8, uint8, int16, uint16, int32, uint32, int64, uint64, string, bool
-- **All Arithmetic Operators**: +, -, *, /, % with proper precedence and parentheses support
+- **Multiple Data Types**: int8, uint8, int16, uint16, int32, uint32, int64, uint64, double, string, bool, and typed arrays of any scalar (e.g., `int32[]`).
+- **Arrays Built-ins**: array literals `[1,2,3]`, indexing `arr[0]`, mutation `arr[0] = 5`, `len(arr)`, `push(arr, value)` (returns new length), `pop(arr)` (returns last element, errors on empty).
+- **Arithmetic Operators**: +, -, *, /, % with proper precedence (modulo is integer-only; floating point uses +,-,*,/)
+- **Bitwise Operators**: &, |, ^, ~, <<, >> (integers only)
+- **Logical Operators**: !, &&, || with short-circuit evaluation
+- **Control Flow**: if/else, while, for, do-while, switch/case/default, ternary `?:`, break/continue
 - **Compound Assignments**: +=, -=, *=, /=
-- **Control Flow**: if/else, while loops, for loops
 - **Procedure Calls**: Scripts can call other procedures defined in the same or different script files
 - **External Function Callbacks**: Call C++ functions from scripts with generic argument passing
 - **Comprehensive Error Reporting**: Compilation and runtime errors with line numbers and procedure names
@@ -103,6 +106,18 @@ Supported escape sequences:
 
 ### Example Script
 
+#### Arrays
+
+```cpp
+int32 arraysDemo(int32 x) {
+    int32[] nums = [1, 2, x];
+    push(nums, 10);          // nums = [1,2,x,10]
+    int32 last = pop(nums);  // last = 10, nums = [1,2,x]
+    nums[0] = nums[0] + 5;   // mutate in-place
+    return nums[0] + len(nums); // (1+5) + 3 = 9 when x = 3
+}
+```
+
 ```cpp
 bool calculate(int32 arg1, int32 arg2) {
     int32 var1 = arg1 + 56;
@@ -123,6 +138,32 @@ int32 factorial(int32 n) {
     }
     return result;
 }
+```
+
+### Bitwise and Logical Examples
+
+```cpp
+// Bitwise operations (integers only)
+int32 bitwiseDemo(int32 a, int32 b) {
+    int32 andVal = a & b;
+    int32 orVal  = a | b;
+    int32 xorVal = a ^ b;
+    int32 shlVal = a << 1;
+    int32 shrVal = b >> 1;
+    int32 notVal = ~a;
+    return andVal + orVal + xorVal + shlVal + shrVal + notVal;
+}
+
+// Logical operators short-circuit
+bool shortCircuitDemo(bool x, bool y) {
+    // right side is skipped when left decides the outcome
+    return (x && expensiveTrue()) || (y || expensiveFalse());
+}
+
+// These could be external functions registered from C++
+// to observe call counts/side effects.
+bool expensiveTrue()  { return true; }
+bool expensiveFalse() { return false; }
 ```
 
 ## Usage in C++ Application
@@ -186,7 +227,7 @@ Main class for managing scripts:
 - `hasProcedure(name)` - Check if procedure exists
 - `getProcedureNames()` - Get list of all loaded procedures
 - `getProcedureInfo(name, info)` - Get procedure signature
-- `setExternalFunctionCallback(callback)` - Set callback for external functions
+- `registerExternalFunction(name, callback)` / `unregisterExternalFunction(name)` - Bind or remove host callbacks callable from scripts
 - `clear()` - Clear all loaded scripts
 
 ### External Function Callback
